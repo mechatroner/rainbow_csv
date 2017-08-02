@@ -14,14 +14,17 @@ There are 2 ways to enable csv columns highlighting:
 
 
 ## RBQL Description
-minimalistic SQL-like language that supports "select" queries with python expressions.
+Minimalistic SQL-like language that supports "select" queries with python expressions.
 
 ### Main Features
 * Use python expressions inside "select", "where" and "order by" statements
 * Use "a1", "a2", ... , "aN" as column names to write select queries
 * Output entries appear in the same order as in input unless "ORDER BY" is provided.
 * "lnum" variable holds entry line number
+* Use double equality "==" instead of single "=" to check for equality
+* Use one of the "join" keywords to run join query
 * Input csv/tsv table may contain varying number of entries (but select query must be written in a way that prevents output of missing values)
+* UTF-8 and unicode are supported
 
 ### Supported SQL Keywords (Keywords are case insensitive)
 * select 
@@ -29,21 +32,35 @@ minimalistic SQL-like language that supports "select" queries with python expres
 * order by
 * desc/asc
 * distinct
+* inner join
+* left join
+* left join strict
 
 ### Special variables
 * `a1`, `a2`, ... , `aN` - column names
 * `*` - whole line/entry
 * `lnum` - line number (1-based)
 * `flen` - number of columns in current line/entry
+* `b1`, `b2`, ... , `bN` - column names in right table B in join operations
+
+### Join queries
+`inner join` and `left join` work exactly like their sql equivalents with only difference that join key in right table "B" must be unique.
+Join statement must have the following form:
+`<join> /path/to/table.tsv on ai == bj` i.e. you can't use python expressions inside join statement.
+`left join strict` is like `left join`, but it fails with an error if some keys in left table "A" don't have matching key in right table "B".
 
 ### Query examples
 
+* `select * where a1 == "Buy"` - use double equality "==" instead of single equality "="
+* `select a1, a2 where a2 in ["car", "plane", "boat"]` - use python's "in" to emulate SQL's "in"
 * `select * where lnum <= 10` - this is an equivalent of bash command "head -n 10", lnum is 1-based')
 * `select a1, a4` - this is an equivalent of bash command "cut -f 1,4"
 * `select * order by int(a2) desc` - this is an equivalent of bash command "sort -k2,2 -r -n"
 * `select * order by random.random()` - random sort, this is an equivalent of bash command "sort -R"
 * `select lnum, *` - enumerate lines, lnum is 1-based
 * `select * where re.match(".*ab.*", a1) is not None` - select entries where first column has "ab" pattern
+* `select * where a1 == "Добрый вечер"` - you can use utf-8 in queries
+* `select a1, b1, b2 inner join ./countries.txt on a2 == b1 order by a1` - an example of join query
 
 
 ## Mappings

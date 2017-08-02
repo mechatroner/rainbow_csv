@@ -291,8 +291,9 @@ func! rainbow_csv#select_mode()
     call add(help_before, '# Welcome to RBQL: SQL with python expressions')
     call add(help_before, "")
     call add(help_before, '# "a1", "a2", etc are column names')
-    call add(help_before, '# You can use them in python expression, e.g. "int(a1) * 20 + len(a2) order by a1 desc"')
+    call add(help_before, '# You can use them in python expression, e.g. "int(a1) * 20 + len(a2) * random.randint(1, 10)"')
     call add(help_before, '# To run the query press F5')
+    call add(help_before, '# For more info visit https://github.com/mechatroner/rainbow_csv')
     call add(help_before, '')
     call add(help_before, 'select')
     call setline(1, help_before)
@@ -302,15 +303,18 @@ func! rainbow_csv#select_mode()
     let help_after = []
     call add(help_after, '')
     call add(help_after, '')
-    call add(help_after, '# To filter result set, uncomment and modify the next two lines:')
-    call add(help_after, '#where')
-    call add(help_after, '#len(a1) > 10')
+    call add(help_after, '# To join with another table, modify this:')
+    call add(help_after, '#left join /path/to/another/table.tsv on a2 == b1')
     call add(help_after, '')
-    call add(help_after, '# To sort result set, uncomment and modify the next two lines:')
-    call add(help_after, '#order by')
-    call add(help_after, '#a2 desc')
+    call add(help_after, '# To filter result set, modify this:')
+    call add(help_after, '#where len(a1) > 10')
+    call add(help_after, '')
+    call add(help_after, '# To sort result set, modify this:')
+    call add(help_after, '#order by a2 desc')
     call add(help_after, '')
     call add(help_after, '# Examples of rbql queries:')
+    call add(help_after, '# select * where a1 == "SELL"')
+    call add(help_after, '# select * where a3 in ["car", "plane", "boat"] and int(a1) >= 100')
     call add(help_after, '# select * where lnum <= 10 # this is an equivalent of bash command "head -n 10", lnum is 1-based')
     call add(help_after, '# select a1, a4 # this is an equivalent of bash command "cut -f 1,4"')
     call add(help_after, '# select * order by int(a2) desc # this is an equivalent of bash command "sort -k2,2 -r -n"')
@@ -395,10 +399,11 @@ func! rainbow_csv#run_select()
     let b:root_table_buf_number = table_buf_number
     let b:self_buf_number = bufnr("%")
     call setbufvar(table_buf_number, 'selected_buf', b:self_buf_number)
+    nnoremap <buffer> <silent> <F4> :bd!<cr>
     nnoremap <buffer> <silent> <F5> :call rainbow_csv#copy_file_content_to_buf(b:self_path, b:root_table_buf_number)<cr>
     nnoremap <buffer> <silent> <F6> :call rainbow_csv#create_save_dialog(b:self_buf_number, b:self_path)<cr>
     setlocal nomodifiable
-    call s:create_recurrent_tip("Press F5 to replace " . table_name . " with this table or F6 to save this as a new file" )
+    call s:create_recurrent_tip("Press F4 to close, F5 to replace " . table_name . " with this table or F6 to save as a new file" )
 endfunc
 
 
@@ -473,6 +478,12 @@ func! rainbow_csv#generate_microlang_syntax(nlines)
     syntax keyword RbCmd select where initialize desc asc
     syntax match RbCmd "ORDER BY"
     syntax match RbCmd "order by"
+    syntax match RbCmd "INNER JOIN"
+    syntax match RbCmd "inner join"
+    syntax match RbCmd "LEFT JOIN"
+    syntax match RbCmd "left join"
+    syntax match RbCmd "LEFT JOIN STRICT"
+    syntax match RbCmd "left join strict"
 endfunc
 
 func! rainbow_csv#generate_syntax(delim)
