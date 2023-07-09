@@ -1068,6 +1068,63 @@ func! s:get_col_num_rfc_lines(line, delim, expected_num_fields)
 endfunc
 
 
+func! s:get_column_offset_single_line(fields, delim, col_num)
+    let offset = 1
+    for fpos in range(a:col_num)
+        let offset += len(a:fields[fpos]) + len(a:delim)
+    endfor
+    return offset
+endfunc
+
+
+func! rainbow_csv#cell_jump(direction)
+    " FIXME use logic from provide_column_info_on_hover()
+    let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
+    if policy == 'monocolumn'
+        return
+    endif
+    "let line_num = line('.')
+    let line = getline('.')
+    if comment_prefix != '' && stridx(line, comment_prefix) == 0
+        return
+    endif
+    let fields = []
+    let col_num = 0
+    if policy == 'quoted_rfc'
+        let report = s:get_col_num_rfc_lines(line, delim, len(header))
+        if len(report) != 2
+            return
+        endif
+        let [fields, col_num] = report
+    else
+        let fields = rainbow_csv#preserving_smart_split(line, delim, policy)[0]
+        let col_num = s:get_col_num_single_line(fields, delim, 0)
+    endif
+    if policy == 'quoted_rfc'
+        " FIXME - not implemented yet.
+        return
+    endif
+    let num_cols = len(fields)
+    if a:direction == 'right'
+        if col_num + 1 >= num_cols
+            " Can't move further right.
+            return
+        endif
+        let offset = s:get_column_offset_single_line(fields, delim, col_num + 1)
+        echomsg "offset " . offset
+        call cursor(0, offset)
+    endif
+    if a:direction == 'left'
+        if col_num == 0
+            " Can't move further left.
+            return
+        endif
+        let offset = s:get_column_offset_single_line(fields, delim, col_num - 1)
+        call cursor(0, offset)
+    endif
+endfunc
+
+
 func! rainbow_csv#provide_column_info_on_hover()
     let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
     if policy == 'monocolumn'

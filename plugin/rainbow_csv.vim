@@ -18,6 +18,10 @@ command! RainbowMultiDelim call rainbow_csv#manual_set('simple', 1)
 command! NoRainbowDelim call rainbow_csv#manual_disable()
 command! RainbowNoDelim call rainbow_csv#manual_disable()
 
+
+command! RainbowCellGoRight call rainbow_csv#cell_jump('right')
+command! RainbowCellGoLeft call rainbow_csv#cell_jump('left')
+
 command! RainbowComment call rainbow_csv#manual_set_comment_prefix(0)
 command! RainbowCommentMulti call rainbow_csv#manual_set_comment_prefix(1)
 command! NoRainbowComment call rainbow_csv#manual_disable_comment_prefix()
