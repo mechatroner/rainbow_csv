@@ -1071,57 +1071,95 @@ endfunc
 func! s:get_column_offset_single_line(fields, delim, col_num)
     let offset = 1
     for fpos in range(a:col_num)
+        if fpos >= len(a:fields)
+            " FIXME unit test this
+            break
+        endif
         let offset += len(a:fields[fpos]) + len(a:delim)
     endfor
     return offset
 endfunc
 
 
+func! s:cell_jump_simple(direction, delim, policy, comment_prefix)
+    let anchor_line_num = line('.')
+    let anchor_line = getline('.')
+    if a:comment_prefix != '' && stridx(anchor_line, a:comment_prefix) == 0
+        return
+    endif
+
+    let fields = rainbow_csv#preserving_smart_split(anchor_line, a:delim, a:policy)[0]
+    let anchor_col_num = s:get_col_num_single_line(fields, a:delim, 0)
+
+    let num_cols = len(fields)
+
+    if a:direction == 'right'
+        if anchor_col_num + 1 >= num_cols
+            " Can't move further right.
+            return
+        endif
+        let offset = s:get_column_offset_single_line(fields, a:delim, anchor_col_num + 1)
+        call cursor(0, offset)
+    endif
+
+    if a:direction == 'left'
+        if anchor_col_num == 0
+            " Can't move further left.
+            return
+        endif
+        let offset = s:get_column_offset_single_line(fields, a:delim, anchor_col_num - 1)
+        call cursor(0, offset)
+    endif
+
+    if a:direction == 'down' || a:direction == 'up'
+        let lastLineNo = line("$")
+        let cur_line_num = anchor_line_num
+        while 1 
+            if a:direction == 'down'
+                let cur_line_num += 1
+            else
+                let cur_line_num -= 1
+            endif
+            if cur_line_num == 0 || cur_line_num > lastLineNo
+                break
+            endif
+            let cur_line = getline(cur_line_num)
+            if a:comment_prefix != '' && stridx(cur_line, a:comment_prefix) == 0
+                continue
+            endif
+            let fields = rainbow_csv#preserving_smart_split(cur_line, a:delim, a:policy)[0]
+            let offset = s:get_column_offset_single_line(fields, a:delim, anchor_col_num)
+            call cursor(cur_line_num, offset)
+            break
+        endwhile
+    endif
+endfunc
+
+func! s:cell_jump_rfc(direction, delim, comment_prefix)
+    " FIXME implement
+    let line = getline('.')
+    if a:comment_prefix != '' && stridx(line, a:comment_prefix) == 0
+        return
+    endif
+    let report = s:get_col_num_rfc_lines(line, a:delim, len(header))
+    if len(report) != 2
+        return
+    endif
+    let [fields, col_num] = report
+endfunc
+
 func! rainbow_csv#cell_jump(direction)
-    " FIXME use logic from provide_column_info_on_hover()
     let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
     if policy == 'monocolumn'
         return
     endif
-    "let line_num = line('.')
-    let line = getline('.')
-    if comment_prefix != '' && stridx(line, comment_prefix) == 0
-        return
-    endif
-    let fields = []
-    let col_num = 0
     if policy == 'quoted_rfc'
-        let report = s:get_col_num_rfc_lines(line, delim, len(header))
-        if len(report) != 2
-            return
-        endif
-        let [fields, col_num] = report
+        call s:cell_jump_rfc(a:direction, delim, comment_prefix)
     else
-        let fields = rainbow_csv#preserving_smart_split(line, delim, policy)[0]
-        let col_num = s:get_col_num_single_line(fields, delim, 0)
+        call s:cell_jump_simple(a:direction, delim, policy, comment_prefix)
     endif
-    if policy == 'quoted_rfc'
-        " FIXME - not implemented yet.
-        return
-    endif
-    let num_cols = len(fields)
-    if a:direction == 'right'
-        if col_num + 1 >= num_cols
-            " Can't move further right.
-            return
-        endif
-        let offset = s:get_column_offset_single_line(fields, delim, col_num + 1)
-        echomsg "offset " . offset
-        call cursor(0, offset)
-    endif
-    if a:direction == 'left'
-        if col_num == 0
-            " Can't move further left.
-            return
-        endif
-        let offset = s:get_column_offset_single_line(fields, delim, col_num - 1)
-        call cursor(0, offset)
-    endif
+
+
 endfunc
 
 
