@@ -21,6 +21,8 @@ command! RainbowNoDelim call rainbow_csv#manual_disable()
 
 command! RainbowCellGoRight call rainbow_csv#cell_jump('right')
 command! RainbowCellGoLeft call rainbow_csv#cell_jump('left')
+command! RainbowCellGoDown call rainbow_csv#cell_jump('down')
+command! RainbowCellGoUp call rainbow_csv#cell_jump('up')
 
 command! RainbowComment call rainbow_csv#manual_set_comment_prefix(0)
 command! RainbowCommentMulti call rainbow_csv#manual_set_comment_prefix(1)
