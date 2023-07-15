@@ -1038,27 +1038,28 @@ func! s:get_col_num_rfc_basic_even_case(line, delim, expected_num_fields)
 endfunc
 
 
-func! s:get_col_num_rfc_lines(line, delim, expected_num_fields)
-    let cur_line = line('.')
-    let [start_line, end_line] = s:find_unbalanced_lines_around(cur_line)
-    let even_number_of_dquotes = len(split(a:line, '"', 1)) % 2 == 1
+func! s:get_current_col_num_rfc_lines(delim, expected_num_fields)
+    let cur_line_text = getline('.')
+    let cur_line_num = line('.')
+    let [start_line, end_line] = s:find_unbalanced_lines_around(cur_line_num)
+    let even_number_of_dquotes = len(split(cur_line_text, '"', 1)) % 2 == 1
     if even_number_of_dquotes
         if start_line != -1 && end_line != -1
-            let report = s:do_get_col_num_rfc_lines(cur_line, a:delim, start_line, end_line, a:expected_num_fields)
+            let report = s:do_get_col_num_rfc_lines(cur_line_num, a:delim, start_line, end_line, a:expected_num_fields)
             if len(report)
                 return report
             endif
         endif
-        return s:get_col_num_rfc_basic_even_case(a:line, a:delim, a:expected_num_fields)
+        return s:get_col_num_rfc_basic_even_case(cur_line_text, a:delim, a:expected_num_fields)
     else
         if start_line != -1
-            let report = s:do_get_col_num_rfc_lines(cur_line, a:delim, start_line, cur_line, a:expected_num_fields)
+            let report = s:do_get_col_num_rfc_lines(cur_line_num, a:delim, start_line, cur_line_num, a:expected_num_fields)
             if len(report)
                 return report
             endif
         endif
         if end_line != -1
-            let report = s:do_get_col_num_rfc_lines(cur_line, a:delim, cur_line, end_line, a:expected_num_fields)
+            let report = s:do_get_col_num_rfc_lines(cur_line_num, a:delim, cur_line_num, end_line, a:expected_num_fields)
             if len(report)
                 return report
             endif
@@ -1135,18 +1136,20 @@ func! s:cell_jump_simple(direction, delim, policy, comment_prefix)
     endif
 endfunc
 
+
 func! s:cell_jump_rfc(direction, delim, comment_prefix)
     " FIXME implement
     let line = getline('.')
     if a:comment_prefix != '' && stridx(line, a:comment_prefix) == 0
         return
     endif
-    let report = s:get_col_num_rfc_lines(line, a:delim, len(header))
+    let report = s:get_current_col_num_rfc_lines(a:delim, len(header))
     if len(report) != 2
         return
     endif
     let [fields, col_num] = report
 endfunc
+
 
 func! rainbow_csv#cell_jump(direction)
     let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
@@ -1158,8 +1161,6 @@ func! rainbow_csv#cell_jump(direction)
     else
         call s:cell_jump_simple(a:direction, delim, policy, comment_prefix)
     endif
-
-
 endfunc
 
 
@@ -1182,7 +1183,7 @@ func! rainbow_csv#provide_column_info_on_hover()
     let fields = []
     let col_num = 0
     if policy == 'quoted_rfc'
-        let report = s:get_col_num_rfc_lines(line, delim, len(header))
+        let report = s:get_current_col_num_rfc_lines(delim, len(header))
         if len(report) != 2
             echo ''
             return
