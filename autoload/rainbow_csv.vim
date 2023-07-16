@@ -957,18 +957,22 @@ endfunc
 
 
 func! s:get_col_num_single_line(fields, delim, offset)
-    let col_num = 0
+    let field_num = 0
     let kb_pos = col('.')
-    let cpos = a:offset + len(a:fields[col_num]) + len(a:delim)
-    while kb_pos > cpos && col_num + 1 < len(a:fields)
-        let col_num += 1
-        let cpos += len(a:fields[col_num]) + len(a:delim)
+    let cpos = a:offset + len(a:fields[field_num]) + len(a:delim)
+    while kb_pos > cpos && field_num + 1 < len(a:fields)
+        let field_num += 1
+        let cpos += len(a:fields[field_num]) + len(a:delim)
     endwhile
-    return col_num
+    return field_num
 endfunc
 
 
-func! s:do_get_col_num_rfc_lines(cur_line, delim, start_line, end_line, expected_num_fields)
+func! s:do_get_current_col_report_rfc(cur_line, delim, start_line, end_line, expected_num_fields)
+    " FIXME this should be similar to parse_document_range_rfc() vscode method.
+    " FIXME refactor - the logic can be split into two stages - 2D field
+    " parsing that generates a list of fields start and end coordinates and
+    " second stage - finding column inside that list.
     let record_lines = getline(a:start_line, a:end_line)
     let record_str = join(record_lines, "\n")
     let [fields, has_warning] = rainbow_csv#preserving_smart_split(record_str, a:delim, 'quoted_rfc')
@@ -977,16 +981,18 @@ func! s:do_get_col_num_rfc_lines(cur_line, delim, start_line, end_line, expected
     endif
     let cursor_line_offset = a:cur_line - a:start_line
     let current_line_offset = 0
-    let col_num = 0
-    while col_num < len(fields)
-        let current_line_offset += len(split(fields[col_num], "\n", 1)) - 1
+    let field_num = 0
+    while field_num < len(fields)
+        let keep_empty = 1
+        let current_line_offset += len(split(fields[field_num], "\n", keep_empty)) - 1
         if current_line_offset >= cursor_line_offset
             break
         endif
-        let col_num += 1
+        let field_num += 1
     endwhile
     if current_line_offset > cursor_line_offset
-        return [fields, col_num]
+        " Cursor is inside a multiline field, last line of which is below the cursor line.
+        return [start_line, end_line, fields, field_num]
     endif
     if current_line_offset < cursor_line_offset
         " Should never happen
@@ -994,15 +1000,16 @@ func! s:do_get_col_num_rfc_lines(cur_line, delim, start_line, end_line, expected
     endif
     let length_of_previous_field_segment_on_cursor_line = 0
     if current_line_offset > 0
-        let length_of_previous_field_segment_on_cursor_line = len(split(fields[col_num], "\n", 1)[-1]) + len(a:delim)
+        " Cursor is on the last line of a multiline field, so we need to calculate the lenth of the last segment of the field on that line.
+        let length_of_previous_field_segment_on_cursor_line = len(split(fields[field_num], "\n", 1)[-1]) + len(a:delim)
         if col('.') <= length_of_previous_field_segment_on_cursor_line
-            return [fields, col_num]
+            return [start_line, end_line, fields, field_num]
         else
-            let col_num += 1
+            let field_num += 1
         endif
     endif
-    let col_num = col_num + s:get_col_num_single_line(fields[col_num:], a:delim, length_of_previous_field_segment_on_cursor_line)
-    return [fields, col_num]
+    let field_num = field_num + s:get_col_num_single_line(fields[field_num:], a:delim, length_of_previous_field_segment_on_cursor_line)
+    return [start_line, end_line, fields, field_num]
 endfunc
 
 
@@ -1038,14 +1045,14 @@ func! s:get_col_num_rfc_basic_even_case(line, delim, expected_num_fields)
 endfunc
 
 
-func! s:get_current_col_num_rfc_lines(delim, expected_num_fields)
+func! s:get_current_col_report_rfc(delim, expected_num_fields)
     let cur_line_text = getline('.')
     let cur_line_num = line('.')
     let [start_line, end_line] = s:find_unbalanced_lines_around(cur_line_num)
     let even_number_of_dquotes = len(split(cur_line_text, '"', 1)) % 2 == 1
     if even_number_of_dquotes
         if start_line != -1 && end_line != -1
-            let report = s:do_get_col_num_rfc_lines(cur_line_num, a:delim, start_line, end_line, a:expected_num_fields)
+            let report = s:do_get_current_col_report_rfc(cur_line_num, a:delim, start_line, end_line, a:expected_num_fields)
             if len(report)
                 return report
             endif
@@ -1053,13 +1060,13 @@ func! s:get_current_col_num_rfc_lines(delim, expected_num_fields)
         return s:get_col_num_rfc_basic_even_case(cur_line_text, a:delim, a:expected_num_fields)
     else
         if start_line != -1
-            let report = s:do_get_col_num_rfc_lines(cur_line_num, a:delim, start_line, cur_line_num, a:expected_num_fields)
+            let report = s:do_get_current_col_report_rfc(cur_line_num, a:delim, start_line, cur_line_num, a:expected_num_fields)
             if len(report)
                 return report
             endif
         endif
         if end_line != -1
-            let report = s:do_get_col_num_rfc_lines(cur_line_num, a:delim, cur_line_num, end_line, a:expected_num_fields)
+            let report = s:do_get_current_col_report_rfc(cur_line_num, a:delim, cur_line_num, end_line, a:expected_num_fields)
             if len(report)
                 return report
             endif
@@ -1143,11 +1150,11 @@ func! s:cell_jump_rfc(direction, delim, comment_prefix)
     if a:comment_prefix != '' && stridx(line, a:comment_prefix) == 0
         return
     endif
-    let report = s:get_current_col_num_rfc_lines(a:delim, len(header))
-    if len(report) != 2
+    let report = s:get_current_col_report_rfc(a:delim, len(header))
+    if len(report) != 4
         return
     endif
-    let [fields, col_num] = report
+    let [start_line, end_line, fields, col_num] = report
 endfunc
 
 
@@ -1183,12 +1190,12 @@ func! rainbow_csv#provide_column_info_on_hover()
     let fields = []
     let col_num = 0
     if policy == 'quoted_rfc'
-        let report = s:get_current_col_num_rfc_lines(delim, len(header))
-        if len(report) != 2
+        let report = s:get_current_col_report_rfc(delim, len(header))
+        if len(report) != 4
             echo ''
             return
         endif
-        let [fields, col_num] = report
+        let [start_line, end_line, fields, col_num] = report
     else
         let fields = rainbow_csv#preserving_smart_split(line, delim, policy)[0]
         let col_num = s:get_col_num_single_line(fields, delim, 0)
