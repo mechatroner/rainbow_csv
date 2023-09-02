@@ -670,7 +670,7 @@ func! rainbow_csv#csv_lint()
     let num_fields = 0
     for linenum in range(1, lastLineNo)
         let line = getline(linenum)
-        if a:comment_prefix != '' && stridx(line, a:comment_prefix) == 0 " Using stridx is less efficient than using 'startswith', since we try to match at every position, but vimscript doesn't have 'startswith'
+        if comment_prefix != '' && stridx(line, comment_prefix) == 0 " Using stridx is less efficient than using 'startswith', since we try to match at every position, but vimscript doesn't have 'startswith'
             continue
         endif
         let [fields, has_warning] = rainbow_csv#preserving_smart_split(line, delim, policy)
