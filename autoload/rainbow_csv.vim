@@ -1013,6 +1013,94 @@ endfunc
 "endfunc
 
 
+
+" FIXME this is how vscode does it -  parse_document_range_rfc + get_cursor_position_info_rfc
+
+
+
+"function get_cursor_position_info_rfc(vscode, document, delim, comment_prefix, position) {
+"    const hover_parse_margin = 20;
+"    let range = new vscode.Range(Math.max(position.line - hover_parse_margin, 0), 0, position.line + hover_parse_margin, 0);
+"    let table_ranges = parse_document_range_rfc(vscode, document, delim, comment_prefix, range);
+"    let last_found_position_info = null; // Use last found instead of first found because cursor position at the border can belong to two ranges simultaneously.
+"    for (let row_info of table_ranges) {
+"        if (row_info.hasOwnProperty('comment_range')) {
+"            if (row_info.comment_range.contains(position)) {
+"                last_found_position_info = {is_comment: true};
+"            }
+"        } else {
+"            for (let col_num = 0; col_num < row_info.record_ranges.length; col_num++) {
+"                // One logical field can map to multiple ranges if it spans multiple lines.
+"                for (let record_range of row_info.record_ranges[col_num]) {
+"                    if (record_range.contains(position)) {
+"                        last_found_position_info = {column_number: col_num, total_columns: row_info.record_ranges.length, split_warning: false};
+"                    }
+"                }
+"            }
+"        }
+"    }
+"    return last_found_position_info;
+"}
+
+"function parse_document_range_rfc(vscode, doc, delim, comment_prefix, range, custom_parsing_margin=null) {
+"    if (custom_parsing_margin === null) {
+"        custom_parsing_margin = dynamic_csv_highlight_margin;
+"    }
+"    let begin_line = Math.max(0, range.start.line - custom_parsing_margin);
+"    let end_line = Math.min(doc.lineCount, range.end.line + custom_parsing_margin);
+"    let table_ranges = [];
+"    let line_aggregator = new csv_utils.MultilineRecordAggregator(comment_prefix);
+"    // The first or the second line in range with an odd number of double quotes is a start line, after finding it we can use the standard parsing algorithm.
+"    for (let lnum = begin_line; lnum < end_line; lnum++) {
+"        let line_text = doc.lineAt(lnum).text;
+"        if (lnum + 1 == doc.lineCount && !line_text)
+"            break;
+"        let inside_multiline_record_before = line_aggregator.is_inside_multiline_record();
+"        let start_line = lnum - line_aggregator.get_num_lines_in_record();
+"        line_aggregator.add_line(line_text);
+"        let inside_multiline_record_after = line_aggregator.is_inside_multiline_record();
+"        if (!inside_multiline_record_before && inside_multiline_record_after) {
+"            // Must be an odd-num line, check if this is an openning line - otherwise reset ranges.
+"            if (!is_opening_rfc_line(line_text, delim)) {
+"                table_ranges = [];
+"                line_aggregator.reset();
+"            }
+"        }
+"        if (line_aggregator.has_comment_line) {
+"            table_ranges.push({comment_range: new vscode.Range(lnum, 0, lnum, line_text.length)});
+"            line_aggregator.reset();
+"        } else if (line_aggregator.has_full_record) {
+"            const newline_marker = '\r\n'; // Use '\r\n' here to guarantee that this sequence is not present anywhere in the lines themselves.
+"            let combined_line = line_aggregator.get_full_line(newline_marker);
+"            line_aggregator.reset();
+"            let [fields, warning] = csv_utils.smart_split(combined_line, delim, QUOTED_POLICY, /*preserve_quotes_and_whitespaces=*/true);
+"            if (!warning) {
+"                table_ranges.push({record_ranges: make_multiline_record_ranges(vscode, delim.length, newline_marker, fields, start_line, lnum)});
+"            }
+"        }
+"    }
+"    return table_ranges;
+"}
+
+
+" Define a set of functions that act as a substitute for MultilineRecordAggregator in VSCode version.
+
+
+
+func! s:parse_document_range_rfc(anchor_line_num)
+    let rfc_local_parse_margin = 20
+    let first_line = max([1, a:anchor_line_num - rfc_local_parse_margin])
+    let last_line = min([line('$'), a:anchor_line_num + rfc_local_parse_margin])
+    let rfc_line_buffer = []
+    let table_ranges = []
+    for cur_line_num in range(first_line, last_line)
+        let line_text = getline(cur_line_num)
+    endfor
+endfunc
+
+
+
+
 func! s:try_find_unbalanced_lines_around(anchor_line_num)
     " Doesn't guarantee parsable range but it guarantees the best candidate in the vicinity.
     " FIXME get rid of this function it seem to be just wrong!"
