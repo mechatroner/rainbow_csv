@@ -968,250 +968,106 @@ func! s:get_col_num_single_line(fields, delim, offset)
 endfunc
 
 
-"func! s:do_get_current_col_report_rfc(cur_line, delim, start_line, end_line, expected_num_fields)
-"    " FIXME this should be similar to parse_document_range_rfc() vscode method.
-"    " FIXME refactor - the logic can be split into two stages - 2D field
-"    " parsing that generates a list of fields start and end coordinates and
-"    " second stage - finding column inside that list.
-"    let record_lines = getline(a:start_line, a:end_line)
-"    let record_str = join(record_lines, "\n")
-"    let [fields, has_warning] = rainbow_csv#preserving_smart_split(record_str, a:delim, 'quoted_rfc')
-"    if has_warning || len(fields) != a:expected_num_fields
-"        return []
-"    endif
-"    let cursor_line_offset = a:cur_line - a:start_line
-"    let current_line_offset = 0
-"    let field_num = 0
-"    while field_num < len(fields)
-"        let keep_empty = 1
-"        let current_line_offset += len(split(fields[field_num], "\n", keep_empty)) - 1
-"        if current_line_offset >= cursor_line_offset
-"            break
-"        endif
-"        let field_num += 1
-"    endwhile
-"    if current_line_offset > cursor_line_offset
-"        " Cursor is inside a multiline field, last line of which is below the cursor line.
-"        return [start_line, end_line, fields, field_num]
-"    endif
-"    if current_line_offset < cursor_line_offset
-"        " Should never happen
-"        return []
-"    endif
-"    let length_of_previous_field_segment_on_cursor_line = 0
-"    if current_line_offset > 0
-"        " Cursor is on the last line of a multiline field, so we need to calculate the lenth of the last segment of the field on that line.
-"        let length_of_previous_field_segment_on_cursor_line = len(split(fields[field_num], "\n", 1)[-1]) + len(a:delim)
-"        if col('.') <= length_of_previous_field_segment_on_cursor_line
-"            return [start_line, end_line, fields, field_num]
-"        else
-"            let field_num += 1
-"        endif
-"    endif
-"    let field_num = field_num + s:get_col_num_single_line(fields[field_num:], a:delim, length_of_previous_field_segment_on_cursor_line)
-"    return [start_line, end_line, fields, field_num]
+func! s:make_multiline_record_ranges(delim_length, newline_marker, fields, start_line, expected_last_line_for_control)
+    " FIXME unit-test this
+    let record_ranges = []
+    let lnum_current = a:start_line
+    let pos_in_editor_line = 0
+    let next_pos_in_editor_line = 0
+    for field_num in range(len(a:fields))
+        let pos_in_logical_field = 0
+        let logical_field_tokens = []
+        while 1
+            let newline_marker_pos = stridx(a:fields[field_num], a:newline_marker, pos_in_logical_field)
+            if newline_marker_pos == -1
+                break
+            endif
+            call add(logical_field_tokens, [lnum_current, pos_in_editor_line, lnum_current, pos_in_editor_line + newline_marker_pos - pos_in_logical_field])
+            let lnum_current += 1
+            let pos_in_editor_line = 0
+            let next_pos_in_editor_line = 0
+            let pos_in_logical_field = newline_marker_pos + len(a:newline_marker)
+        endwhile
+        next_pos_in_editor_line += len(a:fields[field_num]) - pos_in_logical_field
+        if field_num + 1 < len(a:fields)
+            next_pos_in_editor_line += a:delim_length
+        endif
+        call add(logical_field_tokens, [lnum_current, pos_in_editor_line, lnum_current, next_pos_in_editor_line])
+        call add(record_ranges, logical_field_tokens)
+        let pos_in_editor_line = next_pos_in_editor_line
+    endfor
+    if lnum_current != expected_last_line_for_control
+        " Sanity check, should never happen.
+        return []
+    endif
+    return record_ranges
+endfunc
+
+
+func! s:is_opening_rfc_line(line_text, delim)
+    " The line is oppening if by adding a character (to avoid accidental double double quote) and single double quote at the end we can make it parsable without warning!
+    " Some lines can be simultaneously opening and closing, e.g. `",a1,a2` or `a1,a2,"`
+    let warning = rainbow_csv#preserving_quoted_split(a:line_text, a:delim)[1]
+    return !warning;
+endfunc
+
+
+"func! s:get_neighboring_lines(anchor_line_num)
+"    let collected_lines = []
+"    let rfc_local_parse_margin = 20
+"    let first_line = max([1, a:anchor_line_num - rfc_local_parse_margin])
+"    let last_line = min([line('$'), a:anchor_line_num + rfc_local_parse_margin])
+"    for cur_line_num in range(first_line, last_line)
+"    endfor
+"        call add(collected_lines, getline(cur_line_num))
+"    return collected_lines
 "endfunc
 
 
 
-" FIXME this is how vscode does it -  parse_document_range_rfc + get_cursor_position_info_rfc
-
-
-
-"function get_cursor_position_info_rfc(vscode, document, delim, comment_prefix, position) {
-"    const hover_parse_margin = 20;
-"    let range = new vscode.Range(Math.max(position.line - hover_parse_margin, 0), 0, position.line + hover_parse_margin, 0);
-"    let table_ranges = parse_document_range_rfc(vscode, document, delim, comment_prefix, range);
-"    let last_found_position_info = null; // Use last found instead of first found because cursor position at the border can belong to two ranges simultaneously.
-"    for (let row_info of table_ranges) {
-"        if (row_info.hasOwnProperty('comment_range')) {
-"            if (row_info.comment_range.contains(position)) {
-"                last_found_position_info = {is_comment: true};
-"            }
-"        } else {
-"            for (let col_num = 0; col_num < row_info.record_ranges.length; col_num++) {
-"                // One logical field can map to multiple ranges if it spans multiple lines.
-"                for (let record_range of row_info.record_ranges[col_num]) {
-"                    if (record_range.contains(position)) {
-"                        last_found_position_info = {column_number: col_num, total_columns: row_info.record_ranges.length, split_warning: false};
-"                    }
-"                }
-"            }
-"        }
-"    }
-"    return last_found_position_info;
-"}
-
-"function parse_document_range_rfc(vscode, doc, delim, comment_prefix, range, custom_parsing_margin=null) {
-"    if (custom_parsing_margin === null) {
-"        custom_parsing_margin = dynamic_csv_highlight_margin;
-"    }
-"    let begin_line = Math.max(0, range.start.line - custom_parsing_margin);
-"    let end_line = Math.min(doc.lineCount, range.end.line + custom_parsing_margin);
-"    let table_ranges = [];
-"    let line_aggregator = new csv_utils.MultilineRecordAggregator(comment_prefix);
-"    // The first or the second line in range with an odd number of double quotes is a start line, after finding it we can use the standard parsing algorithm.
-"    for (let lnum = begin_line; lnum < end_line; lnum++) {
-"        let line_text = doc.lineAt(lnum).text;
-"        if (lnum + 1 == doc.lineCount && !line_text)
-"            break;
-"        let inside_multiline_record_before = line_aggregator.is_inside_multiline_record();
-"        let start_line = lnum - line_aggregator.get_num_lines_in_record();
-"        line_aggregator.add_line(line_text);
-"        let inside_multiline_record_after = line_aggregator.is_inside_multiline_record();
-"        if (!inside_multiline_record_before && inside_multiline_record_after) {
-"            // Must be an odd-num line, check if this is an openning line - otherwise reset ranges.
-"            if (!is_opening_rfc_line(line_text, delim)) {
-"                table_ranges = [];
-"                line_aggregator.reset();
-"            }
-"        }
-"        if (line_aggregator.has_comment_line) {
-"            table_ranges.push({comment_range: new vscode.Range(lnum, 0, lnum, line_text.length)});
-"            line_aggregator.reset();
-"        } else if (line_aggregator.has_full_record) {
-"            const newline_marker = '\r\n'; // Use '\r\n' here to guarantee that this sequence is not present anywhere in the lines themselves.
-"            let combined_line = line_aggregator.get_full_line(newline_marker);
-"            line_aggregator.reset();
-"            let [fields, warning] = csv_utils.smart_split(combined_line, delim, QUOTED_POLICY, /*preserve_quotes_and_whitespaces=*/true);
-"            if (!warning) {
-"                table_ranges.push({record_ranges: make_multiline_record_ranges(vscode, delim.length, newline_marker, fields, start_line, lnum)});
-"            }
-"        }
-"    }
-"    return table_ranges;
-"}
-
-
-" Define a set of functions that act as a substitute for MultilineRecordAggregator in VSCode version.
-
-
-
-func! s:parse_document_range_rfc(anchor_line_num)
+func! s:parse_document_range_rfc(anchor_line_num, delim, comment_prefix)
+    " FIXME take a list of lines as input and num lines total so that you can unit-test it.
+    " This function is equivalent of parse_document_range_rfc in VSCode version.
     let rfc_local_parse_margin = 20
     let first_line = max([1, a:anchor_line_num - rfc_local_parse_margin])
     let last_line = min([line('$'), a:anchor_line_num + rfc_local_parse_margin])
     let rfc_line_buffer = []
     let table_ranges = []
+    " Comment prefix has no effect if inside multiline field, same as in normal languages like Python or JS.
     for cur_line_num in range(first_line, last_line)
+        let record_text = ''
         let line_text = getline(cur_line_num)
+        if a:comment_prefix != '' && len(rfc_line_buffer) == 0 && stridx(line_text, a:comment_prefix) == 0
+            " No use case to add the comment range, just skip the line.
+            continue
+        endif
+        call add(rfc_line_buffer, line_text)
+        let has_unbalanced_double_quote = len(split(line_text, '"', 1)) % 2 == 0
+        if has_unbalanced_double_quote
+            if len(rfc_line_buffer) == 1
+                if !s:is_opening_rfc_line(line_text, a:delim)
+                    " Parsing error - discard already parsed ranges and start from blank state.
+                    let table_ranges = []
+                    let rfc_line_buffer = []
+                endif
+                continue
+            endif
+        else
+            " The current line has balanced double-quotes.
+            if len(rfc_line_buffer) > 1
+                " This current line is internal in a multi-line record.
+                continue
+            endif
+        endif
+        let record_text = join(rfc_line_buffer, "\n")
+        let [fields, warning] = rainbow_csv#preserving_smart_split(record_text, a:delim, 'quoted')
+        if !warning
+            call add(table_ranges, make_multiline_record_ranges(len(a:delim), "\n", fields, cur_line_num - len(rfc_line_buffer) + 1, cur_line_num))
+        endif
+        let rfc_line_buffer = []
     endfor
-endfunc
-
-
-
-
-func! s:try_find_unbalanced_lines_around(anchor_line_num)
-    " Doesn't guarantee parsable range but it guarantees the best candidate in the vicinity.
-    " FIXME get rid of this function it seem to be just wrong!"
-    " FIXME this fails for normal (non-multiline) csv lines that have some multiline records nearby.
-    " FIXME what if the line has even number of double quotes and is parsable
-    " and matches the expected number of fields???
-    " FIXME we should probably adopt vscode approach instead - just parse everything in some vicinity / search range.
-    let start_line = a:anchor_line_num
-    let end_line = a:anchor_line_num
-    let multiline_search_range = exists('g:multiline_search_range') ? g:multiline_search_range : 10
-    let cur_line_num = max([1, a:anchor_line_num - multiline_search_range])
-    let end_range_line_num = min([line('$'), a:anchor_line_num + multiline_search_range])
-    while cur_line_num < end_range_line_num
-        if len(split(getline(cur_line_num), '"', 1)) % 2 == 0
-            if cur_line_num < a:anchor_line_num
-                let start_line = cur_line_num
-            endif
-            if cur_line_num > a:anchor_line_num
-                let end_line = cur_line_num
-                break
-            endif
-        endif
-        let cur_line_num += 1
-    endwhile
-    return [start_line, end_line]
-endfunc
-
-
-"func! s:get_col_num_rfc_basic_even_case(line_num, line, delim, expected_num_fields)
-"    let [fields, has_warning] = rainbow_csv#preserving_smart_split(a:line, a:delim, 'quoted_rfc')
-"    if !has_warning && len(fields) == a:expected_num_fields
-"        let col_num = s:get_col_num_single_line(fields, a:delim, 0)
-"        return [a:line_num, a:line_num, fields, col_num]
-"    endif
-"    return []
-"endfunc
-
-
-func! s:parse_neighboring_fragment_rfc(delim, line_num, expected_num_fields)
-    " Somewhat similar to parse_document_range_rfc() VSCode method.
-    let table_ranges = []
-    let [start_line, end_line] = s:try_find_unbalanced_lines_around(a:line_num)
-    let record_lines = getline(start_line, end_line)
-    let record_str = join(record_lines, "\n")
-    let [fields, has_warning] = rainbow_csv#preserving_smart_split(record_str, a:delim, 'quoted_rfc')
-    if (has_warning)
-        return table_ranges
-    endif
-    let field_start_line_offset = 0
-    let field_start_col_offset = 0
-    let field_num = 0
-    while field_num < len(fields)
-        let keep_empty = 1
-        let field_end_line_offset = field_start_line_offset + len(split(fields[field_num], "\n", keep_empty)) - 1
-        let field_end_col_offset = field_start_col_offset
-        if field_end_line_offset > field_start_line_offset
-            let field_end_col_offset = 0
-        endif
-        let field_end_col_offset += len(split(fields[field_num], "\n", 1)[-1]) + len(a:delim)
-        call add (table_ranges, [start_line + field_start_line_offset, field_start_col_offset, start_line + field_end_line_offset, field_end_col_offset])
-        let field_start_col_offset = field_end_col_offset
-        let field_start_line_offset = field_end_line_offset
-        let field_num += 1
-    endwhile
     return table_ranges
 endfunc
-
-
-func! s:get_column_containing_position(table_ranges, line_num, col_num)
-    for nf in range(len(a:table_ranges))
-        if a:line_num < a:table_ranges[nf][0] || a:line_num > a:table_ranges[nf][2]
-            continue
-        endif
-        if a:col_num < a:table_ranges[nf][1] || a:col_num > a:table_ranges[nf][3]
-            continue
-        endif
-        return nf
-    endfor
-    return -1
-endfunc
-
-
-"func! s:get_current_col_report_rfc(delim, expected_num_fields)
-"    let cur_line_text = getline('.')
-"    let cur_line_num = line('.')
-"    let [start_line, end_line] = s:try_find_unbalanced_lines_around(cur_line_num)
-"    let even_number_of_dquotes = len(split(cur_line_text, '"', 1)) % 2 == 1
-"    if even_number_of_dquotes
-"        if start_line != -1 && end_line != -1
-"            let report = s:do_get_current_col_report_rfc(cur_line_num, a:delim, start_line, end_line, a:expected_num_fields)
-"            if len(report)
-"                return report
-"            endif
-"        endif
-"        return s:get_col_num_rfc_basic_even_case(cur_line_num, cur_line_text, a:delim, a:expected_num_fields)
-"    else
-"        if start_line != -1
-"            let report = s:do_get_current_col_report_rfc(cur_line_num, a:delim, start_line, cur_line_num, a:expected_num_fields)
-"            if len(report)
-"                return report
-"            endif
-"        endif
-"        if end_line != -1
-"            let report = s:do_get_current_col_report_rfc(cur_line_num, a:delim, cur_line_num, end_line, a:expected_num_fields)
-"            if len(report)
-"                return report
-"            endif
-"        endif
-"        return []
-"    endif
-"endfunc
 
 
 func! s:get_column_offset_single_line(fields, delim, col_num)
@@ -1282,28 +1138,57 @@ func! s:cell_jump_simple(direction, delim, policy, comment_prefix)
 endfunc
 
 
+func! s:get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
+    for rr_idx in range(len(a:table_ranges))
+        let record_ranges = a:table_ranges[rr_idx]
+        for field_index in range(len(record_ranges))
+            let logical_field_tokens = record_ranges[field_index]
+            for lft in logical_field_tokens
+                if a:line_num >= lft[0] && a:line_num <= lft[2] && a:col_num >= lft[1] && a:col_num < lft[3]
+                    return [rr_idx, field_index]
+                endif
+            endfor
+        endfor
+    endfor
+    return [-1, -1]
+endfunc
+
+
+func! s:get_field_coordinates_rfc(table_ranges, relative_record_num, field_num)
+    let record_ranges = a:table_ranges[a:relative_record_num]
+    let first_logical_field_token = record_ranges[field_num][0]
+    return [first_logical_field_token[0], first_logical_field_token[1]]
+endfunc
+
+
 func! s:cell_jump_rfc(direction, delim, comment_prefix)
-    let line = getline('.')
-    if a:comment_prefix != '' && stridx(line, a:comment_prefix) == 0
-        return
-    endif
     let cur_line = line('.')
     let cur_col = col('.')
-    "let report = s:get_current_col_report_rfc(a:delim, len(header))
-    "if len(report) != 4
-    "    return
-    "endif
-    let table_ranges = s:parse_neighboring_fragment_rfc(delim, cur_line, len(header))
-    if len(table_ranges) == 0
-        echo ''
+    let table_ranges = s:parse_document_range_rfc(cur_line, a:delim, a:comment_prefix)
+    let [relative_record_num, field_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
+    if field_num == -1 || relative_record_num == -1
         return
     endif
-    let num_cols = len(table_ranges)
-    let col_num = s:get_column_containing_position(table_ranges, cur_line, cur_col)
-    if col_num == -1
-        echo ''
+    let num_fields = len(table_ranges[relative_record_num])
+    if a:direction == 'right'
+        let field_num += 1
+    elseif a:direction == 'left'
+        let field_num -= 1
+    elseif a:direction == 'down' 
+        let relative_record_num += 1
+    elseif a:direction == 'up'
+        let relative_record_num -= 1
+    else
+        " Should never happen.
         return
     endif
+
+    if (field_num >= num_fields) || (field_num < 0) || (relative_record_num >= len(table_ranges)) || (relative_record_num < 0)
+        return
+    endif
+
+    let [target_lnum, target_colnum] = s:get_field_coordinates_rfc(table_ranges, relative_record_num, field_num)
+    call cursor(target_lnum, target_colnum)
 endfunc
 
 
@@ -1340,17 +1225,8 @@ func! rainbow_csv#provide_column_info_on_hover()
     let col_num = 0
     let num_cols = 0
     if policy == 'quoted_rfc'
-        "let report = s:get_current_col_report_rfc(delim, len(header))
-        let table_ranges = s:parse_neighboring_fragment_rfc(delim, line('.'), len(header))
-        "echomsg len(table_ranges)
-        if len(table_ranges) == 0
-            echo ''
-            return
-        endif
-        " FIXME test with true rfc csv file.
-        " FIXME consider adding unit tests for parse_neighboring_fragment_rfc(), include unparsable tests cases.
-        let num_cols = len(table_ranges)
-        let col_num = s:get_column_containing_position(table_ranges, line('.'), col('.'))
+        let table_ranges = s:parse_document_range_rfc(line('.'), delim, comment_prefix)
+        let [_unused_record_num, col_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, line('.'), col('.'))
         if col_num == -1
             echo ''
             return
