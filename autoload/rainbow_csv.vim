@@ -988,15 +988,15 @@ func! s:make_multiline_record_ranges(delim_length, newline_marker, fields, start
             let next_pos_in_editor_line = 0
             let pos_in_logical_field = newline_marker_pos + len(a:newline_marker)
         endwhile
-        next_pos_in_editor_line += len(a:fields[field_num]) - pos_in_logical_field
+        let next_pos_in_editor_line += len(a:fields[field_num]) - pos_in_logical_field
         if field_num + 1 < len(a:fields)
-            next_pos_in_editor_line += a:delim_length
+           let  next_pos_in_editor_line += a:delim_length
         endif
         call add(logical_field_tokens, [lnum_current, pos_in_editor_line, lnum_current, next_pos_in_editor_line])
         call add(record_ranges, logical_field_tokens)
         let pos_in_editor_line = next_pos_in_editor_line
     endfor
-    if lnum_current != expected_last_line_for_control
+    if lnum_current != a:expected_last_line_for_control
         " Sanity check, should never happen.
         return []
     endif
@@ -1012,31 +1012,29 @@ func! s:is_opening_rfc_line(line_text, delim)
 endfunc
 
 
-"func! s:get_neighboring_lines(anchor_line_num)
-"    let collected_lines = []
-"    let rfc_local_parse_margin = 20
-"    let first_line = max([1, a:anchor_line_num - rfc_local_parse_margin])
-"    let last_line = min([line('$'), a:anchor_line_num + rfc_local_parse_margin])
-"    for cur_line_num in range(first_line, last_line)
-"    endfor
-"        call add(collected_lines, getline(cur_line_num))
-"    return collected_lines
-"endfunc
-
-
-
-func! s:parse_document_range_rfc(anchor_line_num, delim, comment_prefix)
-    " FIXME take a list of lines as input and num lines total so that you can unit-test it.
-    " This function is equivalent of parse_document_range_rfc in VSCode version.
+func! s:get_neighboring_lines(anchor_line_num)
+    let collected_lines = []
+    let collected_line_nums = []
     let rfc_local_parse_margin = 20
     let first_line = max([1, a:anchor_line_num - rfc_local_parse_margin])
     let last_line = min([line('$'), a:anchor_line_num + rfc_local_parse_margin])
+    for cur_line_num in range(first_line, last_line)
+    endfor
+        call add(collected_lines, getline(cur_line_num))
+        call add(collected_line_nums, cur_line_num)
+    return [collected_lines, collected_line_nums]
+endfunc
+
+
+
+func! s:parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    " FIXME unit test this
     let rfc_line_buffer = []
     let table_ranges = []
     " Comment prefix has no effect if inside multiline field, same as in normal languages like Python or JS.
-    for cur_line_num in range(first_line, last_line)
-        let record_text = ''
-        let line_text = getline(cur_line_num)
+    for line_idx in range(len(a:neighboring_line_nums))
+        let cur_line_num = a:neighboring_line_nums[line_idx]
+        let line_text = a:neighboring_lines[line_idx]
         if a:comment_prefix != '' && len(rfc_line_buffer) == 0 && stridx(line_text, a:comment_prefix) == 0
             " No use case to add the comment range, just skip the line.
             continue
@@ -1062,7 +1060,8 @@ func! s:parse_document_range_rfc(anchor_line_num, delim, comment_prefix)
         let record_text = join(rfc_line_buffer, "\n")
         let [fields, warning] = rainbow_csv#preserving_smart_split(record_text, a:delim, 'quoted')
         if !warning
-            call add(table_ranges, make_multiline_record_ranges(len(a:delim), "\n", fields, cur_line_num - len(rfc_line_buffer) + 1, cur_line_num))
+            let record_ranges = s:make_multiline_record_ranges(len(a:delim), "\n", fields, cur_line_num - len(rfc_line_buffer) + 1, cur_line_num)
+            call add(table_ranges, record_ranges)
         endif
         let rfc_line_buffer = []
     endfor
@@ -1164,7 +1163,8 @@ endfunc
 func! s:cell_jump_rfc(direction, delim, comment_prefix)
     let cur_line = line('.')
     let cur_col = col('.')
-    let table_ranges = s:parse_document_range_rfc(cur_line, a:delim, a:comment_prefix)
+    let [neighboring_lines, neighboring_line_nums] = s:get_neighboring_lines(cur_line)
+    let table_ranges = s:parse_document_range_rfc(neighboring_lines, neighboring_line_nums, a:delim, a:comment_prefix)
     let [relative_record_num, field_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
     if field_num == -1 || relative_record_num == -1
         return
@@ -1225,8 +1225,11 @@ func! rainbow_csv#provide_column_info_on_hover()
     let col_num = 0
     let num_cols = 0
     if policy == 'quoted_rfc'
-        let table_ranges = s:parse_document_range_rfc(line('.'), delim, comment_prefix)
-        let [_unused_record_num, col_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, line('.'), col('.'))
+        let cur_line = line('.')
+        let cur_col = col('.')
+        let [neighboring_lines, neighboring_line_nums] = s:get_neighboring_lines(cur_line)
+        let table_ranges = s:parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+        let [_unused_record_num, col_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
         if col_num == -1
             echo ''
             return
