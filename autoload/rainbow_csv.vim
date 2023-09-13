@@ -1165,15 +1165,15 @@ func! s:cell_jump_rfc(direction, delim, comment_prefix)
     let cur_col = col('.')
     let [neighboring_lines, neighboring_line_nums] = s:get_neighboring_lines(cur_line)
     let table_ranges = s:parse_document_range_rfc(neighboring_lines, neighboring_line_nums, a:delim, a:comment_prefix)
-    let [relative_record_num, a:field_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
-    if a:field_num == -1 || relative_record_num == -1
+    let [relative_record_num, field_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
+    if field_num == -1 || relative_record_num == -1
         return
     endif
     let num_fields = len(table_ranges[relative_record_num])
     if a:direction == 'right'
-        let a:field_num += 1
+        let field_num += 1
     elseif a:direction == 'left'
-        let a:field_num -= 1
+        let field_num -= 1
     elseif a:direction == 'down' 
         let relative_record_num += 1
     elseif a:direction == 'up'
@@ -1183,11 +1183,11 @@ func! s:cell_jump_rfc(direction, delim, comment_prefix)
         return
     endif
 
-    if (a:field_num >= num_fields) || (a:field_num < 0) || (relative_record_num >= len(table_ranges)) || (relative_record_num < 0)
+    if (field_num >= num_fields) || (field_num < 0) || (relative_record_num >= len(table_ranges)) || (relative_record_num < 0)
         return
     endif
 
-    let [target_lnum, target_colnum] = s:get_field_coordinates_rfc(table_ranges, relative_record_num, a:field_num)
+    let [target_lnum, target_colnum] = s:get_field_coordinates_rfc(table_ranges, relative_record_num, field_num)
     call cursor(target_lnum, target_colnum)
 endfunc
 
