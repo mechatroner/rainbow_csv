@@ -972,8 +972,8 @@ func! s:make_multiline_record_ranges(delim_length, newline_marker, fields, start
     " FIXME unit-test this
     let record_ranges = []
     let lnum_current = a:start_line
-    let pos_in_editor_line = 0
-    let next_pos_in_editor_line = 0
+    let pos_in_editor_line = 1
+    let next_pos_in_editor_line = 1
     for field_num in range(len(a:fields))
         let pos_in_logical_field = 0
         let logical_field_tokens = []
@@ -982,10 +982,10 @@ func! s:make_multiline_record_ranges(delim_length, newline_marker, fields, start
             if newline_marker_pos == -1
                 break
             endif
-            call add(logical_field_tokens, [lnum_current, pos_in_editor_line, lnum_current, pos_in_editor_line + newline_marker_pos - pos_in_logical_field])
+            call add(logical_field_tokens, [lnum_current, pos_in_editor_line, lnum_current, pos_in_editor_line + (newline_marker_pos - pos_in_logical_field)])
             let lnum_current += 1
-            let pos_in_editor_line = 0
-            let next_pos_in_editor_line = 0
+            let pos_in_editor_line = 1
+            let next_pos_in_editor_line = 1
             let pos_in_logical_field = newline_marker_pos + len(a:newline_marker)
         endwhile
         let next_pos_in_editor_line += len(a:fields[field_num]) - pos_in_logical_field
