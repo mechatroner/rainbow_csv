@@ -855,11 +855,8 @@ def compile_and_run(query_context, user_namespace, unit_test_mode=False):
     def MIN(val):
         return init_aggregator(MinAggregator, val) if query_context.aggregation_stage < 2 else val
 
-
-
     def MAX(val):
         return init_aggregator(MaxAggregator, val) if query_context.aggregation_stage < 2 else val
-
 
     def COUNT(_val):
         return init_aggregator(CountAggregator, 1) if query_context.aggregation_stage < 2 else 1
@@ -1488,6 +1485,7 @@ def shallow_parse_input_query(query_text, input_iterator, tables_registry, query
         if ORDER_BY in rb_actions or UPDATE in rb_actions:
             raise RbqlParsingError(invalid_keyword_in_aggregate_query_error_msg) # UT JSON
         query_context.aggregation_key_expression = '({},)'.format(combine_string_literals(rb_actions[GROUP_BY]['text'], string_literals))
+        query_context.aggregation_stage = 1
 
 
     input_header = input_iterator.get_header()

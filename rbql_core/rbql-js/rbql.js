@@ -1823,6 +1823,7 @@ async function shallow_parse_input_query(query_text, input_iterator, join_tables
         if (rb_actions.hasOwnProperty(ORDER_BY) || rb_actions.hasOwnProperty(UPDATE))
             throw new RbqlParsingError('"ORDER BY", "UPDATE" and "DISTINCT" keywords are not allowed in aggregate queries');
         query_context.aggregation_key_expression = '[' + combine_string_literals(rb_actions[GROUP_BY]['text'], string_literals) + ']';
+        query_context.aggregation_stage = 1;
     }
 
 
