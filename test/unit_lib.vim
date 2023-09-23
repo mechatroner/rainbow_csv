@@ -68,6 +68,7 @@ func! TestAlignStats()
     call AssertEqual(field_components, [7, 4, 3])
 endfunc
 
+
 func! TestMakeMultilineRecordRanges()
     let delim_length = 1
     let record_fields = ["1234567", "123\n45\n67", "123456", "123", "123\n456"]
@@ -76,9 +77,22 @@ func! TestMakeMultilineRecordRanges()
     let record_ranges = rainbow_csv#make_multiline_record_ranges(delim_length, "\n", record_fields, start_line, expected_last_line_for_control)
     call AssertEqual([[[10, 1, 10, 9]], [[10, 9, 10, 12], [11, 1, 11, 3], [12, 1, 12, 4]], [[12, 4, 12, 11]], [[12, 11, 12, 15]], [[12, 15, 12, 18], [13, 1, 13, 4]]], record_ranges)
 
+    " Wrong list line for control.
     let bad_expected_last_line_for_control = 12
     let record_ranges = rainbow_csv#make_multiline_record_ranges(delim_length, "\n", record_fields, start_line, bad_expected_last_line_for_control)
     call AssertEqual([], record_ranges)
+
+    " A lot of empty lines in the middle of the field.
+    let record_fields = ["1234567", "123\n\n\n\n45", "123"]
+    let expected_last_line_for_control = 14
+    let record_ranges = rainbow_csv#make_multiline_record_ranges(delim_length, "\n", record_fields, start_line, expected_last_line_for_control)
+    call AssertEqual([[[10, 1, 10, 9]], [[10, 9, 10, 12], [11, 1, 11, 1], [12, 1, 12, 1], [13, 1, 13, 1], [14, 1, 14, 4]], [[14, 4, 14, 7]]], record_ranges)
+
+    " Many empty fields, same line (no newlines).
+    let record_fields = ["1234", "", "", "", "123"]
+    let expected_last_line_for_control = 10
+    let record_ranges = rainbow_csv#make_multiline_record_ranges(delim_length, "\n", record_fields, start_line, expected_last_line_for_control)
+    call AssertEqual([[[10, 1, 10, 6]], [[10, 6, 10, 7]], [[10, 7, 10, 8]], [[10, 8, 10, 9]], [[10, 9, 10, 12]]], record_ranges)
 endfunc
 
 
