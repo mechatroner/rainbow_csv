@@ -968,17 +968,17 @@ func! s:get_col_num_single_line(fields, delim, offset)
 endfunc
 
 
-func! rainbow_csv#make_multiline_record_ranges(delim_length, newline_marker, fields, start_line, expected_last_line_for_control)
+func! rainbow_csv#make_multiline_record_ranges(delim_length, newline_marker, record_fields, start_line, expected_last_line_for_control)
     " FIXME unit-test this
     let record_ranges = []
     let lnum_current = a:start_line
     let pos_in_editor_line = 1
     let next_pos_in_editor_line = 1
-    for field_num in range(len(a:fields))
+    for field_num in range(len(a:record_fields))
         let pos_in_logical_field = 0
         let logical_field_tokens = []
         while 1
-            let newline_marker_pos = stridx(a:fields[field_num], a:newline_marker, pos_in_logical_field)
+            let newline_marker_pos = stridx(a:record_fields[field_num], a:newline_marker, pos_in_logical_field)
             if newline_marker_pos == -1
                 break
             endif
@@ -988,9 +988,9 @@ func! rainbow_csv#make_multiline_record_ranges(delim_length, newline_marker, fie
             let next_pos_in_editor_line = 1
             let pos_in_logical_field = newline_marker_pos + len(a:newline_marker)
         endwhile
-        let next_pos_in_editor_line += len(a:fields[field_num]) - pos_in_logical_field
-        if field_num + 1 < len(a:fields)
-           let  next_pos_in_editor_line += a:delim_length
+        let next_pos_in_editor_line += len(a:record_fields[field_num]) - pos_in_logical_field
+        if field_num + 1 < len(a:record_fields)
+           let next_pos_in_editor_line += a:delim_length
         endif
         call add(logical_field_tokens, [lnum_current, pos_in_editor_line, lnum_current, next_pos_in_editor_line])
         call add(record_ranges, logical_field_tokens)
