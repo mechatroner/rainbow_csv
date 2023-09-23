@@ -69,6 +69,45 @@ func! TestAlignStats()
 endfunc
 
 
+func! TestGetFieldNumSingleLine()
+    let fields = ["123", "", "1234", "", "", "", "56"]
+    let delim = ","
+    let kb_pos = 3
+    call AssertEqual(0, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 4
+    call AssertEqual(0, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 5
+    call AssertEqual(1, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 6
+    call AssertEqual(2, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 14
+    call AssertEqual(6, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 100500
+    call AssertEqual(6, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+
+"0   1  2      3  4
+"1~#~~#~1234~#~~#~~#~
+    let fields = ["1", "", "1234", "", ""]
+    let delim = "~#~"
+    let kb_pos = 4
+    call AssertEqual(0, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 5
+    call AssertEqual(1, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 6
+    call AssertEqual(1, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 7
+    call AssertEqual(1, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 8
+    call AssertEqual(2, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 14
+    call AssertEqual(2, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 15
+    call AssertEqual(3, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+    let kb_pos = 1000
+    call AssertEqual(4, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+endfunc
+
+
 func! TestMakeMultilineRecordRanges()
     let delim_length = 1
     let record_fields = ["1234567", "123\n45\n67", "123456", "123", "123\n456"]
@@ -313,6 +352,7 @@ func! RunUnitTests()
     call TestFieldAlign()
     call TestAdjustColumnStats()
     call TestMakeMultilineRecordRanges()
+    call TestGetFieldNumSingleLine()
     
     call add(g:rbql_test_log_records, 'Finished Test: Statusline')
 endfunc

@@ -956,11 +956,10 @@ func! rainbow_csv#get_csv_header(delim, policy, comment_prefix)
 endfunc
 
 
-func! s:get_col_num_single_line(fields, delim, offset)
+func! rainbow_csv#get_field_num_single_line(fields, delim, kb_pos)
     let field_num = 0
-    let kb_pos = col('.')
-    let cpos = a:offset + len(a:fields[field_num]) + len(a:delim)
-    while kb_pos > cpos && field_num + 1 < len(a:fields)
+    let cpos = len(a:fields[field_num]) + len(a:delim)
+    while a:kb_pos > cpos && field_num + 1 < len(a:fields)
         let field_num += 1
         let cpos += len(a:fields[field_num]) + len(a:delim)
     endwhile
@@ -969,7 +968,6 @@ endfunc
 
 
 func! rainbow_csv#make_multiline_record_ranges(delim_length, newline_marker, record_fields, start_line, expected_last_line_for_control)
-    " FIXME unit-test this
     let record_ranges = []
     let lnum_current = a:start_line
     let pos_in_editor_line = 1
@@ -1084,31 +1082,32 @@ endfunc
 
 func! s:cell_jump_simple(direction, delim, policy, comment_prefix)
     let anchor_line_num = line('.')
+    let anchor_col_num = col('.')
     let anchor_line = getline('.')
     if a:comment_prefix != '' && stridx(anchor_line, a:comment_prefix) == 0
         return
     endif
 
     let fields = rainbow_csv#preserving_smart_split(anchor_line, a:delim, a:policy)[0]
-    let anchor_col_num = s:get_col_num_single_line(fields, a:delim, 0)
+    let anchor_field_num = rainbow_csv#get_field_num_single_line(fields, a:delim, anchor_col_num)
 
-    let num_cols = len(fields)
+    let num_fields = len(fields)
 
     if a:direction == 'right'
-        if anchor_col_num + 1 >= num_cols
+        if anchor_field_num + 1 >= num_fields
             " Can't move further right.
             return
         endif
-        let offset = s:get_column_offset_single_line(fields, a:delim, anchor_col_num + 1)
+        let offset = s:get_column_offset_single_line(fields, a:delim, anchor_field_num + 1)
         call cursor(0, offset)
     endif
 
     if a:direction == 'left'
-        if anchor_col_num == 0
+        if anchor_field_num == 0
             " Can't move further left.
             return
         endif
-        let offset = s:get_column_offset_single_line(fields, a:delim, anchor_col_num - 1)
+        let offset = s:get_column_offset_single_line(fields, a:delim, anchor_field_num - 1)
         call cursor(0, offset)
     endif
 
@@ -1129,7 +1128,7 @@ func! s:cell_jump_simple(direction, delim, policy, comment_prefix)
                 continue
             endif
             let fields = rainbow_csv#preserving_smart_split(cur_line, a:delim, a:policy)[0]
-            let offset = s:get_column_offset_single_line(fields, a:delim, anchor_col_num)
+            let offset = s:get_column_offset_single_line(fields, a:delim, anchor_field_num)
             call cursor(cur_line_num, offset)
             break
         endwhile
@@ -1223,10 +1222,10 @@ func! rainbow_csv#provide_column_info_on_hover()
     endif
     let fields = []
     let col_num = 0
-    let num_cols = 0
+    let num_fields = 0
+    let cur_col = col('.')
     if policy == 'quoted_rfc'
         let cur_line = line('.')
-        let cur_col = col('.')
         let [neighboring_lines, neighboring_line_nums] = s:get_neighboring_lines(cur_line)
         let table_ranges = s:parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
         let [_unused_record_num, col_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
@@ -1236,8 +1235,8 @@ func! rainbow_csv#provide_column_info_on_hover()
         endif
     else
         let fields = rainbow_csv#preserving_smart_split(line, delim, policy)[0]
-        let col_num = s:get_col_num_single_line(fields, delim, 0)
-        let num_cols = len(fields)
+        let col_num = rainbow_csv#get_field_num_single_line(fields, delim, cur_col)
+        let num_fields = len(fields)
     endif
 
     let ui_message = printf('Col %s', col_num + 1)
@@ -1253,7 +1252,7 @@ func! rainbow_csv#provide_column_info_on_hover()
     if col_name != ""
         let ui_message = ui_message . printf(', %s', col_name)
     endif
-    if len(header) != num_cols
+    if len(header) != num_fields
         let ui_message = ui_message . '; WARN: num of fields in Header and this line differs'
     endif
     if exists("b:root_table_name")
