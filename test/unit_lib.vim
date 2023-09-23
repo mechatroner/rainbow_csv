@@ -68,6 +68,19 @@ func! TestAlignStats()
     call AssertEqual(field_components, [7, 4, 3])
 endfunc
 
+func! TestMakeMultilineRecordRanges()
+    let delim_length = 1
+    let record_fields = ["1234567", "123\n45\n67", "123456", "123", "123\n456"]
+    let start_line = 10
+    let expected_last_line_for_control = 13
+    let record_ranges = rainbow_csv#make_multiline_record_ranges(delim_length, "\n", record_fields, start_line, expected_last_line_for_control)
+    call AssertEqual([[[10, 1, 10, 9]], [[10, 9, 10, 12], [11, 1, 11, 3], [12, 1, 12, 4]], [[12, 4, 12, 11]], [[12, 11, 12, 15]], [[12, 15, 12, 18], [13, 1, 13, 4]]], record_ranges)
+
+    let bad_expected_last_line_for_control = 12
+    let record_ranges = rainbow_csv#make_multiline_record_ranges(delim_length, "\n", record_fields, start_line, bad_expected_last_line_for_control)
+    call AssertEqual([], record_ranges)
+endfunc
+
 
 func! TestAdjustColumnStats()
     " Not a numeric column, adjustment is NOOP.
@@ -285,6 +298,7 @@ func! RunUnitTests()
     call TestAlignStats()
     call TestFieldAlign()
     call TestAdjustColumnStats()
+    call TestMakeMultilineRecordRanges()
     
     call add(g:rbql_test_log_records, 'Finished Test: Statusline')
 endfunc

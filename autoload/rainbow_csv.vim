@@ -968,7 +968,7 @@ func! s:get_col_num_single_line(fields, delim, offset)
 endfunc
 
 
-func! s:make_multiline_record_ranges(delim_length, newline_marker, fields, start_line, expected_last_line_for_control)
+func! rainbow_csv#make_multiline_record_ranges(delim_length, newline_marker, fields, start_line, expected_last_line_for_control)
     " FIXME unit-test this
     let record_ranges = []
     let lnum_current = a:start_line
@@ -1060,7 +1060,7 @@ func! s:parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim
         let record_text = join(rfc_line_buffer, "\n")
         let [fields, warning] = rainbow_csv#preserving_smart_split(record_text, a:delim, 'quoted')
         if !warning
-            let record_ranges = s:make_multiline_record_ranges(len(a:delim), "\n", fields, cur_line_num - len(rfc_line_buffer) + 1, cur_line_num)
+            let record_ranges = rainbow_csv#make_multiline_record_ranges(len(a:delim), "\n", fields, cur_line_num - len(rfc_line_buffer) + 1, cur_line_num)
             call add(table_ranges, record_ranges)
         endif
         let rfc_line_buffer = []
