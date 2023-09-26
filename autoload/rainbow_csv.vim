@@ -956,17 +956,6 @@ func! rainbow_csv#get_csv_header(delim, policy, comment_prefix)
 endfunc
 
 
-func! rainbow_csv#get_field_num_single_line(fields, delim, kb_pos)
-    let field_num = 0
-    let cpos = len(a:fields[field_num]) + len(a:delim)
-    while a:kb_pos > cpos && field_num + 1 < len(a:fields)
-        let field_num += 1
-        let cpos += len(a:fields[field_num]) + len(a:delim)
-    endwhile
-    return field_num
-endfunc
-
-
 func! rainbow_csv#make_multiline_record_ranges(delim_length, newline_marker, record_fields, start_line, expected_last_line_for_control)
     let record_ranges = []
     let lnum_current = a:start_line
@@ -1067,16 +1056,29 @@ func! s:parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim
 endfunc
 
 
-func! s:get_column_offset_single_line(fields, delim, col_num)
+func! rainbow_csv#get_field_offset_single_line(fields, delim, field_num)
     let offset = 1
-    for fpos in range(a:col_num)
+    for fpos in range(a:field_num)
         if fpos >= len(a:fields)
-            " FIXME unit test this
             break
         endif
-        let offset += len(a:fields[fpos]) + len(a:delim)
+        let offset += len(a:fields[fpos])
+        if fpos + 1 < len(a:fields)
+            let offset += len(a:delim)
+        endif
     endfor
     return offset
+endfunc
+
+
+func! rainbow_csv#get_field_num_single_line(fields, delim, kb_pos)
+    let field_num = 0
+    let cpos = len(a:fields[field_num]) + len(a:delim)
+    while a:kb_pos > cpos && field_num + 1 < len(a:fields)
+        let field_num += 1
+        let cpos += len(a:fields[field_num]) + len(a:delim)
+    endwhile
+    return field_num
 endfunc
 
 
@@ -1098,7 +1100,7 @@ func! s:cell_jump_simple(direction, delim, policy, comment_prefix)
             " Can't move further right.
             return
         endif
-        let offset = s:get_column_offset_single_line(fields, a:delim, anchor_field_num + 1)
+        let offset = rainbow_csv#get_field_offset_single_line(fields, a:delim, anchor_field_num + 1)
         call cursor(0, offset)
     endif
 
@@ -1107,7 +1109,7 @@ func! s:cell_jump_simple(direction, delim, policy, comment_prefix)
             " Can't move further left.
             return
         endif
-        let offset = s:get_column_offset_single_line(fields, a:delim, anchor_field_num - 1)
+        let offset = rainbow_csv#get_field_offset_single_line(fields, a:delim, anchor_field_num - 1)
         call cursor(0, offset)
     endif
 
@@ -1128,7 +1130,7 @@ func! s:cell_jump_simple(direction, delim, policy, comment_prefix)
                 continue
             endif
             let fields = rainbow_csv#preserving_smart_split(cur_line, a:delim, a:policy)[0]
-            let offset = s:get_column_offset_single_line(fields, a:delim, anchor_field_num)
+            let offset = rainbow_csv#get_field_offset_single_line(fields, a:delim, anchor_field_num)
             call cursor(cur_line_num, offset)
             break
         endwhile

@@ -69,6 +69,50 @@ func! TestAlignStats()
 endfunc
 
 
+func! TestGetFieldOffsetSingleLine()
+"12,,12,,,,12,
+    let fields = ["12", "", "12", "", "", "", "12", ""]
+    let delim = ","
+    let field_num = 0
+    call AssertEqual(1, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+    let field_num = 1
+    call AssertEqual(4, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+    let field_num = 2
+    call AssertEqual(5, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+    let field_num = 3
+    call AssertEqual(8, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+    let field_num = 4
+    call AssertEqual(9, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+    let field_num = 6
+    call AssertEqual(11, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+    let field_num = 7
+    call AssertEqual(14, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+    let field_num = 1000
+    call AssertEqual(14, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+
+"12
+    let fields = ["12"]
+    let delim = ","
+    let field_num = 0
+    call AssertEqual(1, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+    let field_num = 1
+    call AssertEqual(3, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+    let field_num = 10
+    call AssertEqual(3, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+
+
+    " Test empty line.
+    let fields = [""]
+    let delim = ","
+    let field_num = 0
+    call AssertEqual(1, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+    let field_num = 1
+    call AssertEqual(1, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+    let field_num = 10
+    call AssertEqual(1, rainbow_csv#get_field_offset_single_line(fields, delim, field_num))
+endfunc
+
+
 func! TestGetFieldNumSingleLine()
     let fields = ["123", "", "1234", "", "", "", "56"]
     let delim = ","
@@ -105,6 +149,12 @@ func! TestGetFieldNumSingleLine()
     call AssertEqual(3, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
     let kb_pos = 1000
     call AssertEqual(4, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
+
+    " Test empty line.
+    let fields = [""]
+    let delim = ","
+    let kb_pos = 1
+    call AssertEqual(0, rainbow_csv#get_field_num_single_line(fields, delim, kb_pos))
 endfunc
 
 
@@ -132,6 +182,18 @@ func! TestMakeMultilineRecordRanges()
     let expected_last_line_for_control = 10
     let record_ranges = rainbow_csv#make_multiline_record_ranges(delim_length, "\n", record_fields, start_line, expected_last_line_for_control)
     call AssertEqual([[[10, 1, 10, 6]], [[10, 6, 10, 7]], [[10, 7, 10, 8]], [[10, 8, 10, 9]], [[10, 9, 10, 12]]], record_ranges)
+
+    " Single entry record.
+    let record_fields = ["1234"]
+    let expected_last_line_for_control = 10
+    let record_ranges = rainbow_csv#make_multiline_record_ranges(delim_length, "\n", record_fields, start_line, expected_last_line_for_control)
+    call AssertEqual([[[10, 1, 10, 5]]], record_ranges)
+
+    " Record for an empty line.
+    let record_fields = [""]
+    let expected_last_line_for_control = 10
+    let record_ranges = rainbow_csv#make_multiline_record_ranges(delim_length, "\n", record_fields, start_line, expected_last_line_for_control)
+    call AssertEqual([[[10, 1, 10, 1]]], record_ranges)
 endfunc
 
 
@@ -353,6 +415,7 @@ func! RunUnitTests()
     call TestAdjustColumnStats()
     call TestMakeMultilineRecordRanges()
     call TestGetFieldNumSingleLine()
+    call TestGetFieldOffsetSingleLine()
     
     call add(g:rbql_test_log_records, 'Finished Test: Statusline')
 endfunc
