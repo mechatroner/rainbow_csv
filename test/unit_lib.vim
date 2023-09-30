@@ -130,6 +130,17 @@ func! TestParseDocumentRangeRfc()
     let record_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
     call AssertEqual([], record_ranges)
 
+    " Comment line inside a multiline record is not treated as a comment!
+    let neighboring_lines = [',"ab', '# not a comment', 'c",de']
+    let neighboring_line_nums = [1, 2, 3]
+    let delim = ','
+    let comment_prefix = '#'
+    let record_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    let expected_record_ranges = []
+    call add(expected_record_ranges, [[[1, 1, 1, 2]], [[1, 2, 1, 5], [2, 1, 2, 16], [3, 1, 3, 4]], [[3, 4, 3, 6]]])
+    call AssertEqual(expected_record_ranges, record_ranges)
+
+    " Simple case: two single-line records.
     let neighboring_lines = ['1234,1', '1234,1']
     let neighboring_line_nums = [1, 2]
     let delim = ','
@@ -140,7 +151,7 @@ func! TestParseDocumentRangeRfc()
     call add(expected_record_ranges, [[[2, 1, 2, 6]], [[2, 6, 2, 7]]])
     call AssertEqual(expected_record_ranges, record_ranges)
 
-
+    " Two well-formed records, first one is multiline.
     let neighboring_lines = ['12,"34', '56,78', '9",ab', 'cd,']
     let neighboring_line_nums = [1, 2, 3, 4]
     let delim = ','
@@ -151,9 +162,9 @@ func! TestParseDocumentRangeRfc()
     call add(expected_record_ranges, [[[4, 1, 4, 4]], [[4, 4, 4, 4]]])
     call AssertEqual(expected_record_ranges, record_ranges)
 
-    " FIXME test: parsing error - record opens but doesn't closes
-    " FIXME test: parsing error - record opening is outside the start range
-    " FIXME test: comment prefix inside multiline record
+
+    " FIXME test: parsing error - record opens but doesn't closes, should still parse some lines before
+    " FIXME test: parsing error - record opening is outside the start range, should still parse some lines after (and discard those before)
     " FIXME more tests!
 endfunc
 
