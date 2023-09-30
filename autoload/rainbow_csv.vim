@@ -979,6 +979,7 @@ func! rainbow_csv#make_multiline_record_ranges(delim_length, newline_marker, rec
         if field_num + 1 < len(a:record_fields)
            let next_pos_in_editor_line += a:delim_length
         endif
+        " Field token signature: [inclusive_start_line_1_based, inclusive_start_col_1_based, inclusive_end_line_1_based, exclusive_end_col_1_based].
         call add(logical_field_tokens, [lnum_current, pos_in_editor_line, lnum_current, next_pos_in_editor_line])
         call add(record_ranges, logical_field_tokens)
         let pos_in_editor_line = next_pos_in_editor_line
@@ -994,8 +995,8 @@ endfunc
 func! s:is_opening_rfc_line(line_text, delim)
     " The line is oppening if by adding a character (to avoid accidental double double quote) and single double quote at the end we can make it parsable without warning!
     " Some lines can be simultaneously opening and closing, e.g. `",a1,a2` or `a1,a2,"`
-    let warning = rainbow_csv#preserving_quoted_split(a:line_text, a:delim)[1]
-    return !warning;
+    let warning = rainbow_csv#preserving_quoted_split(a:line_text . 'x"', a:delim)[1]
+    return !warning
 endfunc
 
 
@@ -1013,11 +1014,15 @@ func! s:get_neighboring_lines(anchor_line_num)
 endfunc
 
 
-
-func! s:parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+" FIXME add an integration test with cell jumps, both for simple and rfc cases.
+func! rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
     " FIXME unit test this
     let rfc_line_buffer = []
     let table_ranges = []
+    if len(a:neighboring_lines) != len(a:neighboring_line_nums)
+        " This should never happen.
+        return []
+    endif
     " Comment prefix has no effect if inside multiline field, same as in normal languages like Python or JS.
     for line_idx in range(len(a:neighboring_line_nums))
         let cur_line_num = a:neighboring_line_nums[line_idx]
@@ -1165,7 +1170,7 @@ func! s:cell_jump_rfc(direction, delim, comment_prefix)
     let cur_line = line('.')
     let cur_col = col('.')
     let [neighboring_lines, neighboring_line_nums] = s:get_neighboring_lines(cur_line)
-    let table_ranges = s:parse_document_range_rfc(neighboring_lines, neighboring_line_nums, a:delim, a:comment_prefix)
+    let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, a:delim, a:comment_prefix)
     let [relative_record_num, field_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
     if field_num == -1 || relative_record_num == -1
         return
@@ -1229,7 +1234,7 @@ func! rainbow_csv#provide_column_info_on_hover()
     if policy == 'quoted_rfc'
         let cur_line = line('.')
         let [neighboring_lines, neighboring_line_nums] = s:get_neighboring_lines(cur_line)
-        let table_ranges = s:parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+        let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
         let [_unused_record_num, col_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
         if col_num == -1
             echo ''
