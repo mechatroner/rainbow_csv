@@ -1143,7 +1143,8 @@ func! s:cell_jump_simple(direction, delim, policy, comment_prefix)
 endfunc
 
 
-func! s:get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
+func! rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
+    " FIXME consider adding unit tests.
     for rr_idx in range(len(a:table_ranges))
         let record_ranges = a:table_ranges[rr_idx]
         for field_index in range(len(record_ranges))
@@ -1171,7 +1172,7 @@ func! s:cell_jump_rfc(direction, delim, comment_prefix)
     let cur_col = col('.')
     let [neighboring_lines, neighboring_line_nums] = s:get_neighboring_lines(cur_line)
     let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, a:delim, a:comment_prefix)
-    let [relative_record_num, field_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
+    let [relative_record_num, field_num] = rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
     if field_num == -1 || relative_record_num == -1
         return
     endif
@@ -1235,7 +1236,7 @@ func! rainbow_csv#provide_column_info_on_hover()
         let cur_line = line('.')
         let [neighboring_lines, neighboring_line_nums] = s:get_neighboring_lines(cur_line)
         let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
-        let [_unused_record_num, col_num] = s:get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
+        let [_unused_record_num, col_num] = rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
         if col_num == -1
             echo ''
             return
