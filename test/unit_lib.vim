@@ -119,72 +119,92 @@ func! TestParseDocumentRangeRfc()
     let neighboring_line_nums = []
     let delim = ','
     let comment_prefix = '#'
-    let record_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
-    call AssertEqual([], record_ranges)
+    let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    call AssertEqual([], table_ranges)
 
     " Trivial case - all comments.
     let neighboring_lines = ['# comment', '# comment', '# comment']
     let neighboring_line_nums = [1, 2, 3]
     let delim = ','
     let comment_prefix = '#'
-    let record_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
-    call AssertEqual([], record_ranges)
+    let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    call AssertEqual([], table_ranges)
 
     " Comment line inside a multiline record is not treated as a comment!
     let neighboring_lines = [',"ab', '# not a comment', 'c",de']
     let neighboring_line_nums = [1, 2, 3]
     let delim = ','
     let comment_prefix = '#'
-    let record_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
-    let expected_record_ranges = []
-    call add(expected_record_ranges, [[[1, 1, 1, 2]], [[1, 2, 1, 5], [2, 1, 2, 16], [3, 1, 3, 4]], [[3, 4, 3, 6]]])
-    call AssertEqual(expected_record_ranges, record_ranges)
+    let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    let expected_table_ranges = []
+    call add(expected_table_ranges, [[[1, 1, 1, 2]], [[1, 2, 1, 5], [2, 1, 2, 16], [3, 1, 3, 4]], [[3, 4, 3, 6]]])
+    call AssertEqual(expected_table_ranges, table_ranges)
 
     " Simple case: two single-line records.
     let neighboring_lines = ['1234,1', '1234,1']
     let neighboring_line_nums = [1, 2]
     let delim = ','
     let comment_prefix = '#'
-    let record_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
-    let expected_record_ranges = []
-    call add(expected_record_ranges, [[[1, 1, 1, 6]], [[1, 6, 1, 7]]])
-    call add(expected_record_ranges, [[[2, 1, 2, 6]], [[2, 6, 2, 7]]])
-    call AssertEqual(expected_record_ranges, record_ranges)
+    let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    let expected_table_ranges = []
+    call add(expected_table_ranges, [[[1, 1, 1, 6]], [[1, 6, 1, 7]]])
+    call add(expected_table_ranges, [[[2, 1, 2, 6]], [[2, 6, 2, 7]]])
+    call AssertEqual(expected_table_ranges, table_ranges)
 
     " Two well-formed records, first one is multiline.
     let neighboring_lines = ['12,"34', '56,78', '9",ab', 'cd,']
     let neighboring_line_nums = [1, 2, 3, 4]
     let delim = ','
     let comment_prefix = '#'
-    let record_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
-    let expected_record_ranges = []
-    call add(expected_record_ranges, [[[1, 1, 1, 4]], [[1, 4, 1, 7], [2, 1, 2, 6], [3, 1, 3, 4]], [[3, 4, 3, 6]]])
-    call add(expected_record_ranges, [[[4, 1, 4, 4]], [[4, 4, 4, 4]]])
-    call AssertEqual(expected_record_ranges, record_ranges)
+    let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    let expected_table_ranges = []
+    call add(expected_table_ranges, [[[1, 1, 1, 4]], [[1, 4, 1, 7], [2, 1, 2, 6], [3, 1, 3, 4]], [[3, 4, 3, 6]]])
+    call add(expected_table_ranges, [[[4, 1, 4, 4]], [[4, 4, 4, 4]]])
+    call AssertEqual(expected_table_ranges, table_ranges)
 
     " Mutiline record doesn't close.
     let neighboring_lines = ['12,"34,56"', 'ab,cd', 'ab,"cd', 'ab,cd', 'ab,cd']
     let neighboring_line_nums = [1, 2, 3, 4, 5]
     let delim = ','
     let comment_prefix = '#'
-    let record_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
-    let expected_record_ranges = []
-    call add(expected_record_ranges, [[[1, 1, 1, 4]], [[1, 4, 1, 11]]])
-    call add(expected_record_ranges, [[[2, 1, 2, 4]], [[2, 4, 2, 6]]])
-    call AssertEqual(expected_record_ranges, record_ranges)
+    let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    let expected_table_ranges = []
+    call add(expected_table_ranges, [[[1, 1, 1, 4]], [[1, 4, 1, 11]]])
+    call add(expected_table_ranges, [[[2, 1, 2, 4]], [[2, 4, 2, 6]]])
+    call AssertEqual(expected_table_ranges, table_ranges)
 
     " Mutiline record doesn't open - only closing within the range.
     let neighboring_lines = ['ab,cd', 'ab,cd', 'ab",cd', '12,"34,56"', 'ab,cd']
     let neighboring_line_nums = [1, 2, 3, 4, 5]
     let delim = ','
     let comment_prefix = '#'
-    let record_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
-    let expected_record_ranges = []
-    call add(expected_record_ranges, [[[4, 1, 4, 4]], [[4, 4, 4, 11]]])
-    call add(expected_record_ranges, [[[5, 1, 5, 4]], [[5, 4, 5, 6]]])
-    call AssertEqual(expected_record_ranges, record_ranges)
+    let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    let expected_table_ranges = []
+    call add(expected_table_ranges, [[[4, 1, 4, 4]], [[4, 4, 4, 11]]])
+    call add(expected_table_ranges, [[[5, 1, 5, 4]], [[5, 4, 5, 6]]])
+    call AssertEqual(expected_table_ranges, table_ranges)
 
-    " FIXME more tests - check the implementation to see what corner cases should be tested additionally.
+    " Handling inconsistent args - different number of lines and line nums.
+    let neighboring_lines = ['1234,1', '1234,1']
+    let neighboring_line_nums = [1, 2, 3]
+    let delim = ','
+    let comment_prefix = '#'
+    let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    let expected_table_ranges = []
+    call AssertEqual(expected_table_ranges, table_ranges)
+endfunc
+
+
+func! Test_get_relative_record_num_and_field_num_containing_position()
+    " Test empty table_ranges.
+    let table_ranges = []
+    let line_num = 1
+    let col_num = 1
+    let [relative_record_num, field_num] = rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
+    call AssertEqual(-1, relative_record_num)
+    call AssertEqual(-1, field_num)
+
+    " FIXME add more tests
 endfunc
 
 
@@ -492,6 +512,7 @@ func! RunUnitTests()
     call TestGetFieldNumSingleLine()
     call TestGetFieldOffsetSingleLine()
     call TestParseDocumentRangeRfc()
+    call Test_get_relative_record_num_and_field_num_containing_position()
     
     call add(g:rbql_test_log_records, 'Finished Test: Statusline')
 endfunc
