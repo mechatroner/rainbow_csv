@@ -162,10 +162,29 @@ func! TestParseDocumentRangeRfc()
     call add(expected_record_ranges, [[[4, 1, 4, 4]], [[4, 4, 4, 4]]])
     call AssertEqual(expected_record_ranges, record_ranges)
 
+    " Mutiline record doesn't close.
+    let neighboring_lines = ['12,"34,56"', 'ab,cd', 'ab,"cd', 'ab,cd', 'ab,cd']
+    let neighboring_line_nums = [1, 2, 3, 4, 5]
+    let delim = ','
+    let comment_prefix = '#'
+    let record_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    let expected_record_ranges = []
+    call add(expected_record_ranges, [[[1, 1, 1, 4]], [[1, 4, 1, 11]]])
+    call add(expected_record_ranges, [[[2, 1, 2, 4]], [[2, 4, 2, 6]]])
+    call AssertEqual(expected_record_ranges, record_ranges)
 
-    " FIXME test: parsing error - record opens but doesn't closes, should still parse some lines before
-    " FIXME test: parsing error - record opening is outside the start range, should still parse some lines after (and discard those before)
-    " FIXME more tests!
+    " Mutiline record doesn't open - only closing within the range.
+    let neighboring_lines = ['ab,cd', 'ab,cd', 'ab",cd', '12,"34,56"', 'ab,cd']
+    let neighboring_line_nums = [1, 2, 3, 4, 5]
+    let delim = ','
+    let comment_prefix = '#'
+    let record_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    let expected_record_ranges = []
+    call add(expected_record_ranges, [[[4, 1, 4, 4]], [[4, 4, 4, 11]]])
+    call add(expected_record_ranges, [[[5, 1, 5, 4]], [[5, 4, 5, 6]]])
+    call AssertEqual(expected_record_ranges, record_ranges)
+
+    " FIXME more tests - check the implementation to see what corner cases should be tested additionally.
 endfunc
 
 
