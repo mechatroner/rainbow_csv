@@ -204,7 +204,74 @@ func! Test_get_relative_record_num_and_field_num_containing_position()
     call AssertEqual(-1, relative_record_num)
     call AssertEqual(-1, field_num)
 
-    " FIXME add more tests
+"12,34
+"# hello
+"12,34
+    
+    " Inside comment line.
+    let table_ranges = []
+    call add(table_ranges, [[[1, 1, 1, 4]], [[1, 4, 1, 7]]])
+    call add(table_ranges, [[[3, 1, 3, 4]], [[3, 4, 3, 7]]])
+    let line_num = 2
+    let col_num = 1
+    let [relative_record_num, field_num] = rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
+    call AssertEqual(-1, relative_record_num)
+    call AssertEqual(-1, field_num)
+
+    " Past-the-end column number after the last field in line/record.
+    let table_ranges = []
+    call add(table_ranges, [[[1, 1, 1, 4]], [[1, 4, 1, 7]]])
+    call add(table_ranges, [[[3, 1, 3, 4]], [[3, 4, 3, 7]]])
+    let line_num = 3
+    let col_num = 100
+    let [relative_record_num, field_num] = rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
+    call AssertEqual(1, relative_record_num)
+    call AssertEqual(1, field_num)
+
+    " Last character in field (comma) in a single-line record.
+    let table_ranges = []
+    call add(table_ranges, [[[1, 1, 1, 4]], [[1, 4, 1, 7]]])
+    call add(table_ranges, [[[3, 1, 3, 4]], [[3, 4, 3, 7]]])
+    let line_num = 3
+    let col_num = 3
+    let [relative_record_num, field_num] = rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
+    call AssertEqual(1, relative_record_num)
+    call AssertEqual(0, field_num)
+
+    " First character in field in a single-line record.
+    let table_ranges = []
+    call add(table_ranges, [[[1, 1, 1, 4]], [[1, 4, 1, 7]]])
+    call add(table_ranges, [[[3, 1, 3, 4]], [[3, 4, 3, 7]]])
+    let line_num = 3
+    let col_num = 4
+    let [relative_record_num, field_num] = rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
+    call AssertEqual(1, relative_record_num)
+    call AssertEqual(1, field_num)
+
+"12,"34
+"56,78
+"9",ab
+"cd,
+    
+    " Inside the first multiline field.
+    let table_ranges = []
+    call add(table_ranges, [[[1, 1, 1, 4]], [[1, 4, 1, 7], [2, 1, 2, 6], [3, 1, 3, 4]], [[3, 4, 3, 6]]])
+    call add(table_ranges, [[[4, 1, 4, 4]], [[4, 4, 4, 4]]])
+    let line_num = 2
+    let col_num = 5
+    let [relative_record_num, field_num] = rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
+    call AssertEqual(0, relative_record_num)
+    call AssertEqual(1, field_num)
+
+    " Past-the-end column number inside the first multiline field.
+    let table_ranges = []
+    call add(table_ranges, [[[1, 1, 1, 4]], [[1, 4, 1, 7], [2, 1, 2, 6], [3, 1, 3, 4]], [[3, 4, 3, 6]]])
+    call add(table_ranges, [[[4, 1, 4, 4]], [[4, 4, 4, 4]]])
+    let line_num = 2
+    let col_num = 100
+    let [relative_record_num, field_num] = rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
+    call AssertEqual(0, relative_record_num)
+    call AssertEqual(1, field_num)
 endfunc
 
 

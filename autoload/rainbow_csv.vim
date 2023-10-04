@@ -1144,13 +1144,15 @@ endfunc
 
 
 func! rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
-    " FIXME consider adding unit tests.
     for rr_idx in range(len(a:table_ranges))
         let record_ranges = a:table_ranges[rr_idx]
         for field_index in range(len(record_ranges))
             let logical_field_tokens = record_ranges[field_index]
-            for lft in logical_field_tokens
-                if a:line_num >= lft[0] && a:line_num <= lft[2] && a:col_num >= lft[1] && a:col_num < lft[3]
+            for lft_idx in range(len(logical_field_tokens))
+                let lft = logical_field_tokens[lft_idx]
+                " Explanation : is_last_loken_in_line = (<last-field-in-record>) || (<non-last-logical-token-in-field>)
+                let is_last_loken_in_line = (field_index + 1 >= len(record_ranges)) || (lft_idx + 1 < len(logical_field_tokens))
+                if a:line_num >= lft[0] && a:line_num <= lft[2] && a:col_num >= lft[1] && (a:col_num < lft[3] || is_last_loken_in_line)
                     return [rr_idx, field_index]
                 endif
             endfor
