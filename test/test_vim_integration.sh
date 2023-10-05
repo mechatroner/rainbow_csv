@@ -60,7 +60,7 @@ if [ $errors != 0 ] || [ ! -e vim_debug.log ] ; then
     exit 1
 fi
 
-if [ $total != 11 ] || [ $started != $finished ] || [ $fails != 0 ] ; then
+if [ $total != 13 ] || [ $started != $finished ] || [ $fails != 0 ] ; then
     echo "FAIL! Integration tests failed: see vim_unit_test.log"  1>&2
     exit 1
 fi
