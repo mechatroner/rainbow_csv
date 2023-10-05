@@ -4,6 +4,87 @@
 
 :call add(g:rbql_test_log_records, 'Starting full integration tests')
 
+:e ../rbql_core/test/csv_files/synthetic_rfc_newline_data.csv
+:sleep 1000 m
+:set ft=rfc_csv
+:sleep 100 m
+:echo "Testing cell jumps for rfc"
+:call cursor(1, 1)
+:sleep 100 m
+
+:RainbowCellGoUp
+:sleep 100 m
+:RainbowCellGoUp
+:sleep 100 m
+:RainbowCellGoUp
+:sleep 100 m
+:RainbowCellGoUp
+:sleep 100 m
+:RainbowCellGoUp
+:sleep 100 m
+:RainbowCellGoUp
+:sleep 100 m
+:RainbowCellGoLeft
+:sleep 100 m
+:RainbowCellGoLeft
+:sleep 100 m
+:RainbowCellGoUp
+:sleep 100 m
+:RainbowCellGoLeft
+:sleep 100 m
+:RainbowCellGoLeft
+:sleep 100 m
+
+:let cpos = getcurpos()
+:let lnum=cpos[1]
+:let cnum=cpos[2]
+:let log_msg = (lnum <= 2 && cnum <= 2) ? 'OK' : 'FAIL: Wrong cursor pos after jumps: lnum: ' . lnum . ', cnum: ' . cnum
+:call add(g:rbql_test_log_records, log_msg)
+:call cursor(1, 1)
+:sleep 1000 m
+
+:sleep 500 m
+:RainbowCellGoRight
+:sleep 500 m
+:RainbowCellGoRight
+:sleep 500 m
+:RainbowCellGoDown
+:sleep 500 m
+:RainbowCellGoDown
+:sleep 500 m
+:RainbowCellGoRight
+:sleep 500 m
+:RainbowCellGoDown
+:sleep 500 m
+:RainbowCellGoRight
+:sleep 500 m
+:RainbowCellGoLeft
+:sleep 500 m
+:RainbowCellGoDown
+:sleep 500 m
+:RainbowCellGoUp
+:sleep 500 m
+:RainbowCellGoUp
+:sleep 500 m
+:RainbowCellGoUp
+:sleep 500 m
+:RainbowCellGoUp
+:sleep 500 m
+:RainbowCellGoUp
+:sleep 500 m
+:RainbowCellGoUp
+:sleep 500 m
+:RainbowCellGoUp
+:sleep 500 m
+:RainbowCellGoLeft
+:sleep 500 m
+
+:let cpos = getcurpos()
+:let lnum=cpos[1]
+:let cnum=cpos[2]
+:let log_msg = (lnum <= 2 && cnum <= 2) ? 'OK' : 'FAIL: Wrong cursor pos after jumps: lnum: ' . lnum . ', cnum: ' . cnum
+:call add(g:rbql_test_log_records, log_msg)
+
 :e ../rbql_core/test/csv_files/movies.tsv
 
 :let g:rbql_backend_language = 'python'

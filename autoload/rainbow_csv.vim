@@ -1016,7 +1016,6 @@ endfunc
 
 " FIXME add an integration test with cell jumps, both for simple and rfc cases.
 func! rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
-    " FIXME unit test this
     let rfc_line_buffer = []
     let table_ranges = []
     if len(a:neighboring_lines) != len(a:neighboring_line_nums)
