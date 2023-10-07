@@ -340,7 +340,7 @@ endfunc
 
 
 func! rainbow_csv#is_rainbow_table_or_was_just_disabled()
-    return (exists("b:rainbow_features_enabled") && b:rainbow_features_enabled == 1)
+    return (exists("b:rbcsv") && b:rbcsv == 1)
 endfunc
 
 
@@ -1201,6 +1201,9 @@ endfunc
 
 
 func! rainbow_csv#cell_jump(direction)
+    if !exists("b:rbcsv") || b:rbcsv != 1
+        return
+    endif
     let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
     if policy == 'monocolumn'
         return
@@ -1265,7 +1268,7 @@ func! rainbow_csv#provide_column_info_on_hover()
         let ui_message = ui_message . '; WARN: num of fields in Header and this line differs'
     endif
     if exists("b:root_table_name")
-        let ui_message = ui_message . printf('; F7: Copy to %s', b:root_table_name)
+        let ui_message = ui_message . printf('; Run `:RainbowCopyBack` Copy to %s', b:root_table_name)
     endif
     echo ui_message
 endfunc
@@ -1548,10 +1551,6 @@ func! rainbow_csv#select_from_file()
     let b:table_buf_number = buf_number
     let b:rainbow_select = 1
 
-    if !exists("g:disable_rainbow_key_mappings")
-        nnoremap <buffer> <F5> :RbRun<cr>
-    endif
-
     call s:generate_microlang_syntax(num_fields)
     if !already_exists
         if meta_language == "python"
@@ -1565,13 +1564,17 @@ func! rainbow_csv#select_from_file()
 endfunc
 
 
-func! rainbow_csv#copy_file_content_to_buf(src_file_path, dst_buf_no)
+func! rainbow_csv#copy_data_back()
+    if !exists('b:root_table_buf_number')
+        echoerr "Unable to copy back: Something went wrong."
+    endif
+    let source_file_path = resolve(expand("%:p"))
     bd!
     redraw!
     echo "executing..."
-    execute "buffer " . a:dst_buf_no
+    execute "buffer " . b:dst_buf_no
     call rainbow_csv#clear_current_buf_content()
-    let lines = readfile(a:src_file_path)
+    let lines = readfile(source_file_path)
     call setline(1, lines)
 endfunc
 
@@ -1710,10 +1713,6 @@ func! s:converged_select(table_buf_number, rb_script_path, query_buf_nr)
     let b:self_buf_number = bufnr("%")
     call setbufvar(a:table_buf_number, 'selected_buf', b:self_buf_number)
 
-    if !exists("g:disable_rainbow_key_mappings")
-        nnoremap <buffer> <F7> :call rainbow_csv#copy_file_content_to_buf(b:self_path, b:root_table_buf_number)<cr>
-    endif
-
     if len(psv_warning_report)
         let warnings = split(psv_warning_report, "\n")
         for wnum in range(len(warnings))
@@ -1848,13 +1847,10 @@ endfunc
 
 
 func! rainbow_csv#buffer_disable_rainbow_features()
-    let b:rainbow_features_enabled = 0
+    let b:rbcsv = 0
     augroup RainbowHintGrp
         autocmd! CursorMoved <buffer>
     augroup END
-    if !exists("g:disable_rainbow_key_mappings")
-        unmap <buffer> <F5>
-    endif
 endfunc
 
 
@@ -1863,7 +1859,7 @@ func! rainbow_csv#buffer_enable_rainbow_features()
         call rainbow_csv#buffer_disable_rainbow_features()
     endif
 
-    let b:rainbow_features_enabled = 1
+    let b:rbcsv = 1
 
     set laststatus=2
 
@@ -1873,10 +1869,6 @@ func! rainbow_csv#buffer_enable_rainbow_features()
 
     " maybe use setlocal number ?
     set number
-
-    if !exists("g:disable_rainbow_key_mappings")
-        nnoremap <buffer> <F5> :RbSelect<cr>
-    endif
 
     highlight status_line_default_hl ctermbg=black guibg=black
 
@@ -1993,7 +1985,7 @@ func! rainbow_csv#handle_new_file()
         let table_params = s:guess_table_params_from_content_frequency_based()
     endif
     if !len(table_params)
-        let b:rainbow_features_enabled = 0
+        let b:rbcsv = 0
         return
     endif
     call rainbow_csv#set_rainbow_filetype(table_params[0], table_params[1], s:get_auto_comment_prefix())
@@ -2006,8 +1998,8 @@ func! rainbow_csv#handle_buffer_enter()
         call rainbow_csv#init_rb_color_groups()
     endif
 
-    if exists("b:rainbow_features_enabled")
-        if b:rainbow_features_enabled
+    if exists("b:rbcsv")
+        if b:rbcsv
             " This is a workaround against Vim glitches. sometimes it 'forgets' to highlight the file even when ft=csv, see https://stackoverflow.com/questions/14779299/syntax-highlighting-randomly-disappears-during-file-saving
             " From the other hand it can discard highlight ":hi ... " rules from user config, so let's disable this for now
             " syntax enable
@@ -2035,7 +2027,7 @@ func! rainbow_csv#handle_buffer_enter()
     if len(table_params)
         " 'disabled' is just for backward compatibility, it is an alias to 'monocolumn'
         if table_params[1] == 'disabled' || table_params[1] == 'monocolumn'
-            let b:rainbow_features_enabled = 0
+            let b:rbcsv = 0
         else
             call rainbow_csv#set_rainbow_filetype(table_params[0], table_params[1], table_params[2])
         endif
