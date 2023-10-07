@@ -85,18 +85,6 @@ You can even highlight function arguments in your programming language using com
 And you can always turn off the rainbow highlighting using _:NoRainbowDelim_ command.  
 
 
-### Key Mappings
-Key mappings are only assigned for files with active rainbow highlighting
-
-|Key                       | Action                                             |
-|--------------------------|----------------------------------------------------|
-|**F5**                    | Start query editing for the current csv file       |
-|**F5**                    | Execute currently edited query                     |
-|**F7**                    | Copy query result set to the parent buffer         |
-
-You can disable these mappings by setting `let g:disable_rainbow_key_mappings = 1`
-
-
 ### Commands
 
 #### :RainbowDelim
@@ -108,12 +96,32 @@ in source code in different colors. To return back to original syntax highlighti
 
 #### :RainbowMultiDelim
 
-Same as _:RainbowDelim_, but works with multicharacter separators.
+Same as _:RainbowDelim_, but works with multicharacter separators.  
 Visually select the multicharacter separator (e.g. `~#~`) and run _:RainbowMultiDelim_ command.
 
 #### :NoRainbowDelim
 
 Disable rainbow columns highlighting for the current file.
+
+#### :RainbowCellGoUp
+
+Move cursor one cell up.  
+Consider mapping this to Ctrl+[Up Arrow], see the "Key Mappings" section.
+
+#### :RainbowCellGoDown
+
+Move cursor one cell down.  
+Consider mapping this to Ctrl+[Down Arrow], see the "Key Mappings" section.
+
+#### :RainbowCellGoLeft
+
+Move cursor one cell left.  
+Consider mapping this to Ctrl+[Left Arrow], see the "Key Mappings" section.
+
+#### :RainbowCellGoRight
+
+Move cursor one cell right.  
+Consider mapping this to Ctrl+[Right Arrow], see the "Key Mappings" section.
 
 
 #### :RainbowComment
@@ -144,13 +152,13 @@ Remove leading and trailing whitespaces from all fields. Opposite to RainbowAlig
 
 #### :Select ...
 
-Allows to enter RBQL select query as vim command.
-e.g. _:Select a1, a2 order by a1_
+Allows to enter RBQL select query as vim command.  
+E.g. _:Select a1, a2 order by a1_
 
 #### :Update ...
 
-Allows to enter RBQL update query as vim command.
-e.g. _:Update a1 = a1 + " " + a2_
+Allows to enter RBQL update query as vim command.  
+E.g. _:Update a1 = a1 + " " + a2_
 
 #### :RainbowName \<name\>
 
@@ -163,6 +171,29 @@ intead of:
 JOIN /path/to/my/customers/table ON a1 == b1
 ```
 
+#### :RainbowCopyBack
+
+This command only applicable for RBQL output files.  
+Replace the content of the original file that was used to run the RBQL query with the query result set data.
+
+
+### Key Mappings
+Plugin does not create any new key mappings, but you can define your own in your .vimrc file.  
+All highlighted files have a special buffer variable `b:rbcsv` set to 1, so you can use this to define conditional csv-only key mappings.  
+For example, to conditionally map Ctrl+Arrow keys to cell navigation commands you can use this snippet:
+
+```
+nnoremap <expr> <C-Left> get(b:, 'rbcsv', 0) == 1 ? ':RainbowCellGoLeft<CR>' : '<C-Left>'
+nnoremap <expr> <C-Right> get(b:, 'rbcsv', 0) == 1 ? ':RainbowCellGoRight<CR>' : '<C-Right>'
+nnoremap <expr> <C-Up> get(b:, 'rbcsv', 0) == 1 ? ':RainbowCellGoUp<CR>' : '<C-Up>'
+nnoremap <expr> <C-Down> get(b:, 'rbcsv', 0) == 1 ? ':RainbowCellGoDown<CR>' : '<C-Down>'
+```
+
+You can also map arrow keys unconditionally, but this will have no effect outside highlighted CSV files, e.g.
+```
+nnoremap <C-Right> :RainbowCellGoRight<CR>
+```
+
 ### Configuration
 
 #### g:disable_rainbow_hover
@@ -173,7 +204,7 @@ let g:disable_rainbow_hover = 1
 ```
 
 #### g:rcsv_delimiters
-Default: _["\t", ",", ";", "|"]_
+Default: _["\t", ",", ";", "|"]_  
 List of separators to try for content-based autodetection  
 You can add or remove values from the list. Example:
 ```
@@ -215,10 +246,6 @@ let g:rcsv_colorpairs = [['red', 'red'], ['blue', 'blue'], ['green', 'green'], [
 Default: _10_  
 This settings is only relevant for rfc_csv and rfc_semicolon dialects.  
 If some multiline records contain more lines that this value, hover info will not work correctly. It is not recommended to significantly increase this value because it will have negative impact on hover info performance 
-
-#### g:disable_rainbow_key_mappings
-Disable default key mappings introduced by the extension  
-
 
 #### g:rbql_backend_language
 Default: _python_
