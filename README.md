@@ -204,7 +204,7 @@ let g:disable_rainbow_hover = 1
 ```
 
 #### g:rcsv_delimiters
-Default: _["\t", ",", ";", "|"]_  
+Default: `["\t", ",", ";", "|"]`  
 List of separators to try for content-based autodetection  
 You can add or remove values from the list. Example:
 ```
@@ -221,7 +221,7 @@ Manual delimiter selection would still be possible.
 You can also manually associate specific file extensions with 'csv' or 'tsv' filetypes  
 
 #### g:rainbow_comment_prefix
-Default: _''_  
+Default: `''`  
 A string to use as a comment prefix for all CSV files you open in Vim.  
 This setting is helpful if you are dealing with lots of CSV files which consistently use the same comment prefix e.g. `'#'` or `'>>'`  
 If you want to enable comments on file-by-file basis, use the `:RainbowComment` or `:RainbowCommentMulti` commands instead.  
@@ -229,8 +229,7 @@ To cancel the effect of `g:rainbow_comment_prefix` just for the current file use
 
 
 #### g:rcsv_max_columns
-Default: _30_
-
+Default: `30`  
 Autodetection will fail if buffer has more than _g:rcsv\_max\_columns_ columns.  
 You can increase or decrease this limit.
 
@@ -243,27 +242,27 @@ let g:rcsv_colorpairs = [['red', 'red'], ['blue', 'blue'], ['green', 'green'], [
 ```
 
 #### g:multiline_search_range
-Default: _10_  
+Default: `10`  
 This settings is only relevant for rfc_csv and rfc_semicolon dialects.  
 If some multiline records contain more lines that this value, hover info will not work correctly. It is not recommended to significantly increase this value because it will have negative impact on hover info performance 
 
 #### g:rbql_backend_language
-Default: _python_
-Supported values: 'python', 'js'  
+Default: `'python'`  
+Supported values: `'python'`, `'js'`  
 
 Scripting language to use in RBQL expressions.
 
 
 #### g:rbql_encoding
-Default: _utf-8_
-Supported values: 'utf-8', 'latin-1'  
+Default: `utf-8`  
+Supported values: `'utf-8'`, `'latin-1'`  
 
 CSV files encoding for RBQL. 
 
 
 #### g:rbql_output_format
-Default: _input_  
-Supported values: _tsv_, _csv_, _input_
+Default: `'input'`  
+Supported values: `'tsv'`, `'csv'`, `'input'`
 
 Format of RBQL result set tables.
 
