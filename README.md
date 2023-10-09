@@ -452,14 +452,15 @@ You can define custom functions and/or import libraries in two special files:
 
 #### Rainbow CSV and similar plugins in other editors:
 
+* Rainbow CSV for [Neovim](https://github.com/cameron-wags/rainbow_csv.nvim) - fork of Vim plugin, has some improvements and optimizations.
 * Rainbow CSV extension in [Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=mechatroner.rainbow-csv)
-* rainbow-csv package in [Atom](https://atom.io/packages/rainbow-csv)
 * rainbow_csv plugin in [Sublime Text](https://packagecontrol.io/packages/rainbow_csv)
-* rainbow_csv plugin in [gedit](https://github.com/mechatroner/gtk_gedit_rainbow_csv) - doesn't support quoted commas in csv
-* rainbow_csv_4_nedit in [NEdit](https://github.com/DmitTrix/rainbow_csv_4_nedit)
-* CSV highlighting in [Nano](https://github.com/scopatz/nanorc)
 * Rainbow CSV in [IntelliJ IDEA](https://plugins.jetbrains.com/plugin/12896-rainbow-csv/)
 * CSVLint for [Notepad++](https://github.com/BdR76/CSVLint)
+* rainbow_csv_4_nedit in [NEdit](https://github.com/DmitTrix/rainbow_csv_4_nedit)
+* CSV highlighting in [Nano](https://github.com/scopatz/nanorc)
+* rainbow-csv package in [Atom](https://atom.io/packages/rainbow-csv)
+* rainbow_csv plugin in [gedit](https://github.com/mechatroner/gtk_gedit_rainbow_csv) - doesn't support quoted commas in csv
 
 #### RBQL
 
