@@ -1489,8 +1489,9 @@ func! s:make_select_line(num_fields)
 endfunc
 
 
+" FIXME document RainbowQuery replacement (both in README and in vim docs)
+" FIXME update welcome_py.rbql and welcome_js.rbql - get rid of F5 map mentions.
 func! s:make_rbql_demo(num_fields, rbql_welcome_path)
-    " FIXME make sure that the demo shows the command name to run the query.
     let select_line = s:make_select_line(a:num_fields)
     let lines = readfile(a:rbql_welcome_path)
     let query_line_num = 1
@@ -1561,6 +1562,8 @@ func! rainbow_csv#select_from_file()
             call s:make_rbql_demo(num_fields, rbql_welcome_js_path)
         endif
     endif
+    redraw!
+    echo "Execute `:RainbowQuery` again to run the query."
 endfunc
 
 
@@ -1766,6 +1769,15 @@ func! rainbow_csv#finish_query_editing()
     let query_buf_nr = bufnr("%")
     let table_buf_number = b:table_buf_number
     call s:converged_select(table_buf_number, rb_script_path, query_buf_nr)
+endfunc
+
+
+func! rainbow_csv#start_or_finish_query_editing()
+    if exists("b:rainbow_select")
+        call rainbow_csv#finish_query_editing()
+    else
+        call rainbow_csv#select_from_file()
+    endif
 endfunc
 
 

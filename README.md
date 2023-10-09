@@ -67,7 +67,7 @@ rfc_csv and rfc_semicolon take their name from [RFC 4180](https://tools.ietf.org
 
 ### Built-in RBQL query language
 Rainbow CSV comes with built-in lightweight RBQL SQL-like query engine.  
-To run an RBQL query either use `:Select` command  e.g. `:Select a1, a2` or run `:RbSelect` command to enter query editing mode.  
+To run an RBQL query either use `:Select` command  e.g. `:Select a1, a2` or run `:RainbowQuery` command to enter query editing mode.  
 
 Demonstration of rainbow_csv highlighting and RBQL queries 
 
