@@ -33,9 +33,12 @@ command! CSVLint call rainbow_csv#csv_lint()
 command! RainbowAlign call rainbow_csv#csv_align()
 command! RainbowShrink call rainbow_csv#csv_shrink()
 
-command! RbSelect call rainbow_csv#select_from_file()
-command! RbRun call rainbow_csv#finish_query_editing()
+command! RainbowQuery call rainbow_csv#start_or_finish_query_editing()
 command! -nargs=+ Select call rainbow_csv#run_select_cmd_query(<q-args>)
 command! -nargs=+ Update call rainbow_csv#run_update_cmd_query(<q-args>)
 command! -nargs=1 RainbowName call rainbow_csv#set_table_name_for_buffer(<q-args>)
 command! RainbowCopyBack call rainbow_csv#copy_data_back()
+
+" These funcs are only for backward compatibility. TODO: remove them at some point.
+command! RbSelect call rainbow_csv#select_from_file()
+command! RbRun call rainbow_csv#finish_query_editing()

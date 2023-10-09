@@ -32,9 +32,7 @@ There are 4 ways to enable csv columns highlighting:
 3.  Manual CSV delimiter selection with |:RainbowMultiDelim| for multi-character delimiters
 4.  Execute `:set ft=csv` or `:set ft=tsv` for CSV/TSV dialects. For other separators use |:RainbowDelim|
 
-To run an RBQL query either press <F5> or enter the query in vim command line e.g. >
-    :Select a1, a2
-<
+To run an RBQL query either use |:Select| command  e.g. ":Select a1, a2" or run |:RainbowQuery| command to enter query editing mode.  
 As soon as you finish entering "select" (or update) and press whitespace, the plugin will show column names in the status line.
 
 The core functionality of the plugin is written in pure vimscript, no additional libraries required.
