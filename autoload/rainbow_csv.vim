@@ -1014,7 +1014,6 @@ func! s:get_neighboring_lines(anchor_line_num)
 endfunc
 
 
-" FIXME add an integration test with cell jumps, both for simple and rfc cases.
 func! rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
     let rfc_line_buffer = []
     let table_ranges = []
@@ -1491,6 +1490,7 @@ endfunc
 
 
 func! s:make_rbql_demo(num_fields, rbql_welcome_path)
+    " FIXME make sure that the demo shows the command name to run the query.
     let select_line = s:make_select_line(a:num_fields)
     let lines = readfile(a:rbql_welcome_path)
     let query_line_num = 1

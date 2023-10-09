@@ -18,6 +18,7 @@ Main features:
 * Provide _SELECT_ and _UPDATE_ queries in RBQL: SQL-like transprogramming query language.
 * Consistency check for csv files (CSVLint)
 * Align and Shrink CSV fields (add/remove trailing spaces in fields)
+* Cell-level cursor navigation
 
 There are 4 ways to enable csv columns highlighting:
 1. CSV autodetection based on file content and/or extension  
@@ -65,9 +66,8 @@ rfc_csv and rfc_semicolon take their name from [RFC 4180](https://tools.ietf.org
 
 
 ### Built-in RBQL query language
-Rainbow CSV comes with built-in lightweight RBQL SQL-like query engine.
-To run an RBQL query either press _F5_ (_:RbSelect_ command) or enter the query in vim command line e.g. _:Select a1, a2_  
-As soon as you finish entering ":select" (or ":update") and press whitespace, the plugin will show column names in the status line.  
+Rainbow CSV comes with built-in lightweight RBQL SQL-like query engine.  
+To run an RBQL query either use `:Select` command  e.g. `:Select a1, a2` or run `:RbSelect` command to enter query editing mode.  
 
 Demonstration of rainbow_csv highlighting and RBQL queries 
 
