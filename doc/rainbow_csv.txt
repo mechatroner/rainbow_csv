@@ -7,8 +7,8 @@ Rainbow CSV: highlight columns in csv/tsv files and execute SELECT and UPDATE
 queries in SQL-like language
 
 1. Overview        |rainbow_csv-overview|
-2. Mappings        |rainbow_csv-mappings|
-3. Commands        |rainbow_csv-commands|
+2. Commands        |rainbow_csv-commands|
+3. Key Mappings    |rainbow_csv-key_mappings|
 4. Configuration   |rainbow_csv-configuration|
 5. Tips            |rainbow_csv-tips|
 6. RBQL            |rainbow_csv-RBQL|
@@ -24,6 +24,7 @@ Main features:  ~
 *  Provide `SELECT` and `UPDATE` queries in RBQL: SQL-like transprogramming query language.
 *  Consistency check for csv files (CSVLint)
 *  Align and Shrink CSV fields (add/remove trailing spaces in fields)
+*  Cell-level cursor navigation
 
 There are 4 ways to enable csv columns highlighting:
 1.  CSV autodetection based on file content and/or extension
@@ -31,9 +32,7 @@ There are 4 ways to enable csv columns highlighting:
 3.  Manual CSV delimiter selection with |:RainbowMultiDelim| for multi-character delimiters
 4.  Execute `:set ft=csv` or `:set ft=tsv` for CSV/TSV dialects. For other separators use |:RainbowDelim|
 
-To run an RBQL query either press <F5> or enter the query in vim command line e.g. >
-    :Select a1, a2
-<
+To run an RBQL query either use |:Select| command  e.g. ":Select a1, a2" or run |:RainbowQuery| command to enter query editing mode.  
 As soon as you finish entering "select" (or update) and press whitespace, the plugin will show column names in the status line.
 
 The core functionality of the plugin is written in pure vimscript, no additional libraries required.
@@ -77,17 +76,7 @@ To work with such files you can set filetype to either "rfc_csv" or "rfc_semicol
 Syntax highlighting for rfc_csv and rfc_semicolon dialects can go out of sync with the file content under specific conditions, use `:syntax sync fromstart` command in that case
 
 ==============================================================================
-2. Mappings                                              *rainbow_csv-mappings*
-
-Key 		Action
-<F5>		Start query editing for the current csv file
-<F5>		Execute currently edited query
-<F7>		Copy query result set to the parent buffer
-
-
-
-==============================================================================
-3. Commands                                              *rainbow_csv-commands*
+2. Commands                                              *rainbow_csv-commands*
 
 *:RainbowDelim*
 
@@ -109,6 +98,27 @@ Visually select the multicharacter separator (e.g. `~#~`) and run |:RainbowMulti
 *:NoRainbowDelim*
 
 Disable rainbow columns highlighting for the current file.
+
+
+*:RainbowCellGoUp*
+
+Move cursor one cell up.  
+Consider mapping this to Ctrl+[Up Arrow], see the "Key Mappings" section.
+
+*:RainbowCellGoDown*
+
+Move cursor one cell down.  
+Consider mapping this to Ctrl+[Down Arrow], see the "Key Mappings" section.
+
+*:RainbowCellGoLeft*
+
+Move cursor one cell left.  
+Consider mapping this to Ctrl+[Left Arrow], see the "Key Mappings" section.
+
+*:RainbowCellGoRight*
+
+Move cursor one cell right.  
+Consider mapping this to Ctrl+[Right Arrow], see the "Key Mappings" section.
 
 
 *:RainbowComment*
@@ -156,6 +166,15 @@ Example >
   :Update a1 = a1 + " " + a2
 <
 
+*:RainbowQuery*
+
+Enter RBQL Query editing mode.  
+When in the query editing mode, execute |:RainbowQuery| again to run the query.  
+Consider mapping |:RainbowQuery| to <F5> key i.e.
+>
+  nnoremap <F5> :RainbowQuery<CR>
+<
+
 *:RainbowName* {name}
 
 Assign any name to the current table. You can use this name in join operation
@@ -167,6 +186,29 @@ Intead of: >
   JOIN /path/to/my/customers/table ON a1 == b1
 <
 
+*:RainbowCopyBack*
+
+This command only applicable for RBQL output files.
+Replace the content of the original file that was used to run the RBQL query with the query result set data.
+
+==============================================================================
+3. Key Mappings                                              *rainbow_csv-key_mappings*
+
+Plugin does not create any new key mappings, but you can define your own in your .vimrc file.  
+All highlighted files have a special buffer variable |b:rbcsv| set to 1, so you can use this to define conditional csv-only key mappings.  
+For example, to conditionally map Ctrl+Arrow keys to cell navigation commands you can use this snippet:
+>
+  nnoremap <expr> <C-Left> get(b:, 'rbcsv', 0) == 1 ? ':RainbowCellGoLeft<CR>' : '<C-Left>'
+  nnoremap <expr> <C-Right> get(b:, 'rbcsv', 0) == 1 ? ':RainbowCellGoRight<CR>' : '<C-Right>'
+  nnoremap <expr> <C-Up> get(b:, 'rbcsv', 0) == 1 ? ':RainbowCellGoUp<CR>' : '<C-Up>'
+  nnoremap <expr> <C-Down> get(b:, 'rbcsv', 0) == 1 ? ':RainbowCellGoDown<CR>' : '<C-Down>'
+<
+
+You can also map arrow keys unconditionally, but this will have no effect outside highlighted CSV files, e.g.
+>
+  nnoremap <C-Right> :RainbowCellGoRight<CR>
+<
+
 
 ==============================================================================
 4. Configuration                                    *rainbow_csv-configuration*
@@ -174,7 +216,7 @@ Intead of: >
 *g:disable_rainbow_hover*
 Set to `1` to stop showing info about the column under the cursor in Vim command line
 Example: >
-let g:disable_rainbow_hover = 1
+  let g:disable_rainbow_hover = 1
 <
 
 
@@ -183,6 +225,7 @@ List of color name pairs to customize rainbow highlighting.
 Each entry in the list is a pair of two colors: the first color is for terminal mode, the second one is for GUI mode.
 Example: >
   let g:rcsv_colorpairs = [['red', 'red'], ['blue', 'blue'], ['green', 'green'], ['magenta', 'magenta'], ['NONE', 'NONE'], ['darkred', 'darkred'], ['darkblue', 'darkblue'], ['darkgreen', 'darkgreen'], ['darkmagenta', 'darkmagenta'], ['darkcyan', 'darkcyan']]
+<
 
 
 *g:rcsv_colorlinks*
@@ -195,10 +238,6 @@ Example: >
 Default: 10
 This settings is only relevant for rfc_csv and rfc_semicolon dialects.
 If some multiline records contain more lines that this value, hover info will not work correctly. It is not recommended to significantly increase this value because it will have negative impact on hover info performance
-
-
-*g:disable_rainbow_key_mappings*
-Disable default key mappings introduced by the extension
 
 
 *g:rbql_encoding*

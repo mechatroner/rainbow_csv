@@ -340,7 +340,7 @@ endfunc
 
 
 func! rainbow_csv#is_rainbow_table_or_was_just_disabled()
-    return (exists("b:rainbow_features_enabled") && b:rainbow_features_enabled == 1)
+    return (exists("b:rbcsv") && b:rbcsv == 1)
 endfunc
 
 
@@ -956,114 +956,261 @@ func! rainbow_csv#get_csv_header(delim, policy, comment_prefix)
 endfunc
 
 
-func! s:get_col_num_single_line(fields, delim, offset)
-    let col_num = 0
-    let kb_pos = col('.')
-    let cpos = a:offset + len(a:fields[col_num]) + len(a:delim)
-    while kb_pos > cpos && col_num + 1 < len(a:fields)
-        let col_num += 1
-        let cpos += len(a:fields[col_num]) + len(a:delim)
-    endwhile
-    return col_num
-endfunc
-
-
-func! s:do_get_col_num_rfc_lines(cur_line, delim, start_line, end_line, expected_num_fields)
-    let record_lines = getline(a:start_line, a:end_line)
-    let record_str = join(record_lines, "\n")
-    let [fields, has_warning] = rainbow_csv#preserving_smart_split(record_str, a:delim, 'quoted_rfc')
-    if has_warning || len(fields) != a:expected_num_fields
-        return []
-    endif
-    let cursor_line_offset = a:cur_line - a:start_line
-    let current_line_offset = 0
-    let col_num = 0
-    while col_num < len(fields)
-        let current_line_offset += len(split(fields[col_num], "\n", 1)) - 1
-        if current_line_offset >= cursor_line_offset
-            break
-        endif
-        let col_num += 1
-    endwhile
-    if current_line_offset > cursor_line_offset
-        return [fields, col_num]
-    endif
-    if current_line_offset < cursor_line_offset
-        " Should never happen
-        return []
-    endif
-    let length_of_previous_field_segment_on_cursor_line = 0
-    if current_line_offset > 0
-        let length_of_previous_field_segment_on_cursor_line = len(split(fields[col_num], "\n", 1)[-1]) + len(a:delim)
-        if col('.') <= length_of_previous_field_segment_on_cursor_line
-            return [fields, col_num]
-        else
-            let col_num += 1
-        endif
-    endif
-    let col_num = col_num + s:get_col_num_single_line(fields[col_num:], a:delim, length_of_previous_field_segment_on_cursor_line)
-    return [fields, col_num]
-endfunc
-
-
-func! s:find_unbalanced_lines_around(cur_line)
-    let start_line = -1
-    let end_line = -1
-    let multiline_search_range = exists('g:multiline_search_range') ? g:multiline_search_range : 10
-    let lnmb = max([1, a:cur_line - multiline_search_range])
-    let lnme = min([line('$'), a:cur_line + multiline_search_range])
-    while lnmb < lnme
-        if len(split(getline(lnmb), '"', 1)) % 2 == 0
-            if lnmb < a:cur_line
-                let start_line = lnmb
-            endif
-            if lnmb > a:cur_line
-                let end_line = lnmb
+func! rainbow_csv#make_multiline_record_ranges(delim_length, newline_marker, record_fields, start_line, expected_last_line_for_control)
+    let record_ranges = []
+    let lnum_current = a:start_line
+    let pos_in_editor_line = 1
+    let next_pos_in_editor_line = 1
+    for field_num in range(len(a:record_fields))
+        let pos_in_logical_field = 0
+        let logical_field_tokens = []
+        while 1
+            let newline_marker_pos = stridx(a:record_fields[field_num], a:newline_marker, pos_in_logical_field)
+            if newline_marker_pos == -1
                 break
             endif
+            call add(logical_field_tokens, [lnum_current, pos_in_editor_line, lnum_current, pos_in_editor_line + (newline_marker_pos - pos_in_logical_field)])
+            let lnum_current += 1
+            let pos_in_editor_line = 1
+            let next_pos_in_editor_line = 1
+            let pos_in_logical_field = newline_marker_pos + len(a:newline_marker)
+        endwhile
+        let next_pos_in_editor_line += len(a:record_fields[field_num]) - pos_in_logical_field
+        if field_num + 1 < len(a:record_fields)
+           let next_pos_in_editor_line += a:delim_length
         endif
-        let lnmb += 1
-    endwhile
-    return [start_line, end_line]
-endfunc
-
-
-func! s:get_col_num_rfc_basic_even_case(line, delim, expected_num_fields)
-    let [fields, has_warning] = rainbow_csv#preserving_smart_split(a:line, a:delim, 'quoted_rfc')
-    if !has_warning && len(fields) == a:expected_num_fields
-        let col_num = s:get_col_num_single_line(fields, a:delim, 0)
-        return [fields, col_num]
-    endif
-    return []
-endfunc
-
-
-func! s:get_col_num_rfc_lines(line, delim, expected_num_fields)
-    let cur_line = line('.')
-    let [start_line, end_line] = s:find_unbalanced_lines_around(cur_line)
-    let even_number_of_dquotes = len(split(a:line, '"', 1)) % 2 == 1
-    if even_number_of_dquotes
-        if start_line != -1 && end_line != -1
-            let report = s:do_get_col_num_rfc_lines(cur_line, a:delim, start_line, end_line, a:expected_num_fields)
-            if len(report)
-                return report
-            endif
-        endif
-        return s:get_col_num_rfc_basic_even_case(a:line, a:delim, a:expected_num_fields)
-    else
-        if start_line != -1
-            let report = s:do_get_col_num_rfc_lines(cur_line, a:delim, start_line, cur_line, a:expected_num_fields)
-            if len(report)
-                return report
-            endif
-        endif
-        if end_line != -1
-            let report = s:do_get_col_num_rfc_lines(cur_line, a:delim, cur_line, end_line, a:expected_num_fields)
-            if len(report)
-                return report
-            endif
-        endif
+        " Field token signature: [inclusive_start_line_1_based, inclusive_start_col_1_based, inclusive_end_line_1_based, exclusive_end_col_1_based].
+        call add(logical_field_tokens, [lnum_current, pos_in_editor_line, lnum_current, next_pos_in_editor_line])
+        call add(record_ranges, logical_field_tokens)
+        let pos_in_editor_line = next_pos_in_editor_line
+    endfor
+    if lnum_current != a:expected_last_line_for_control
+        " Sanity check, should never happen.
         return []
+    endif
+    return record_ranges
+endfunc
+
+
+func! s:is_opening_rfc_line(line_text, delim)
+    " The line is oppening if by adding a character (to avoid accidental double double quote) and single double quote at the end we can make it parsable without warning!
+    " Some lines can be simultaneously opening and closing, e.g. `",a1,a2` or `a1,a2,"`
+    let warning = rainbow_csv#preserving_quoted_split(a:line_text . 'x"', a:delim)[1]
+    return !warning
+endfunc
+
+
+func! s:get_neighboring_lines(anchor_line_num)
+    let collected_lines = []
+    let collected_line_nums = []
+    let rfc_local_parse_margin = 20
+    let first_line = max([1, a:anchor_line_num - rfc_local_parse_margin])
+    let last_line = min([line('$'), a:anchor_line_num + rfc_local_parse_margin])
+    for cur_line_num in range(first_line, last_line)
+        call add(collected_lines, getline(cur_line_num))
+        call add(collected_line_nums, cur_line_num)
+    endfor
+    return [collected_lines, collected_line_nums]
+endfunc
+
+
+func! rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+    let rfc_line_buffer = []
+    let table_ranges = []
+    if len(a:neighboring_lines) != len(a:neighboring_line_nums)
+        " This should never happen.
+        return []
+    endif
+    " Comment prefix has no effect if inside multiline field, same as in normal languages like Python or JS.
+    for line_idx in range(len(a:neighboring_line_nums))
+        let cur_line_num = a:neighboring_line_nums[line_idx]
+        let line_text = a:neighboring_lines[line_idx]
+        if a:comment_prefix != '' && len(rfc_line_buffer) == 0 && stridx(line_text, a:comment_prefix) == 0
+            " No use case to add the comment range, just skip the line.
+            continue
+        endif
+        call add(rfc_line_buffer, line_text)
+        let has_unbalanced_double_quote = len(split(line_text, '"', 1)) % 2 == 0
+        if has_unbalanced_double_quote
+            if len(rfc_line_buffer) == 1
+                if !s:is_opening_rfc_line(line_text, a:delim)
+                    " Parsing error - discard already parsed ranges and start from blank state.
+                    let table_ranges = []
+                    let rfc_line_buffer = []
+                endif
+                continue
+            endif
+        else
+            " The current line has balanced double-quotes.
+            if len(rfc_line_buffer) > 1
+                " This current line is internal in a multi-line record.
+                continue
+            endif
+        endif
+        let record_text = join(rfc_line_buffer, "\n")
+        let [fields, warning] = rainbow_csv#preserving_smart_split(record_text, a:delim, 'quoted')
+        if !warning
+            let record_ranges = rainbow_csv#make_multiline_record_ranges(len(a:delim), "\n", fields, cur_line_num - len(rfc_line_buffer) + 1, cur_line_num)
+            call add(table_ranges, record_ranges)
+        endif
+        let rfc_line_buffer = []
+    endfor
+    return table_ranges
+endfunc
+
+
+func! rainbow_csv#get_field_offset_single_line(fields, delim, field_num)
+    let offset = 1
+    for fpos in range(a:field_num)
+        if fpos >= len(a:fields)
+            break
+        endif
+        let offset += len(a:fields[fpos])
+        if fpos + 1 < len(a:fields)
+            let offset += len(a:delim)
+        endif
+    endfor
+    return offset
+endfunc
+
+
+func! rainbow_csv#get_field_num_single_line(fields, delim, kb_pos)
+    let field_num = 0
+    let cpos = len(a:fields[field_num]) + len(a:delim)
+    while a:kb_pos > cpos && field_num + 1 < len(a:fields)
+        let field_num += 1
+        let cpos += len(a:fields[field_num]) + len(a:delim)
+    endwhile
+    return field_num
+endfunc
+
+
+func! s:cell_jump_simple(direction, delim, policy, comment_prefix)
+    let anchor_line_num = line('.')
+    let anchor_col_num = col('.')
+    let anchor_line = getline('.')
+    if a:comment_prefix != '' && stridx(anchor_line, a:comment_prefix) == 0
+        return
+    endif
+
+    let fields = rainbow_csv#preserving_smart_split(anchor_line, a:delim, a:policy)[0]
+    let anchor_field_num = rainbow_csv#get_field_num_single_line(fields, a:delim, anchor_col_num)
+
+    let num_fields = len(fields)
+
+    if a:direction == 'right'
+        if anchor_field_num + 1 >= num_fields
+            " Can't move further right.
+            return
+        endif
+        let offset = rainbow_csv#get_field_offset_single_line(fields, a:delim, anchor_field_num + 1)
+        call cursor(0, offset)
+    endif
+
+    if a:direction == 'left'
+        if anchor_field_num == 0
+            " Can't move further left.
+            return
+        endif
+        let offset = rainbow_csv#get_field_offset_single_line(fields, a:delim, anchor_field_num - 1)
+        call cursor(0, offset)
+    endif
+
+    if a:direction == 'down' || a:direction == 'up'
+        let lastLineNo = line("$")
+        let cur_line_num = anchor_line_num
+        while 1 
+            if a:direction == 'down'
+                let cur_line_num += 1
+            else
+                let cur_line_num -= 1
+            endif
+            if cur_line_num == 0 || cur_line_num > lastLineNo
+                break
+            endif
+            let cur_line = getline(cur_line_num)
+            if a:comment_prefix != '' && stridx(cur_line, a:comment_prefix) == 0
+                continue
+            endif
+            let fields = rainbow_csv#preserving_smart_split(cur_line, a:delim, a:policy)[0]
+            let offset = rainbow_csv#get_field_offset_single_line(fields, a:delim, anchor_field_num)
+            call cursor(cur_line_num, offset)
+            break
+        endwhile
+    endif
+endfunc
+
+
+func! rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, line_num, col_num)
+    for rr_idx in range(len(a:table_ranges))
+        let record_ranges = a:table_ranges[rr_idx]
+        for field_index in range(len(record_ranges))
+            let logical_field_tokens = record_ranges[field_index]
+            for lft_idx in range(len(logical_field_tokens))
+                let lft = logical_field_tokens[lft_idx]
+                " Explanation : is_last_loken_in_line = (<last-field-in-record>) || (<non-last-logical-token-in-field>)
+                let is_last_loken_in_line = (field_index + 1 >= len(record_ranges)) || (lft_idx + 1 < len(logical_field_tokens))
+                if a:line_num >= lft[0] && a:line_num <= lft[2] && a:col_num >= lft[1] && (a:col_num < lft[3] || is_last_loken_in_line)
+                    return [rr_idx, field_index]
+                endif
+            endfor
+        endfor
+    endfor
+    return [-1, -1]
+endfunc
+
+
+func! s:get_field_coordinates_rfc(table_ranges, relative_record_num, field_num)
+    let record_ranges = a:table_ranges[a:relative_record_num]
+    let first_logical_field_token = record_ranges[a:field_num][0]
+    return [first_logical_field_token[0], first_logical_field_token[1]]
+endfunc
+
+
+func! s:cell_jump_rfc(direction, delim, comment_prefix)
+    let cur_line = line('.')
+    let cur_col = col('.')
+    let [neighboring_lines, neighboring_line_nums] = s:get_neighboring_lines(cur_line)
+    let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, a:delim, a:comment_prefix)
+    let [relative_record_num, field_num] = rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
+    if field_num == -1 || relative_record_num == -1
+        return
+    endif
+    let num_fields = len(table_ranges[relative_record_num])
+    if a:direction == 'right'
+        let field_num += 1
+    elseif a:direction == 'left'
+        let field_num -= 1
+    elseif a:direction == 'down' 
+        let relative_record_num += 1
+    elseif a:direction == 'up'
+        let relative_record_num -= 1
+    else
+        " Should never happen.
+        return
+    endif
+
+    if (field_num >= num_fields) || (field_num < 0) || (relative_record_num >= len(table_ranges)) || (relative_record_num < 0)
+        return
+    endif
+
+    let [target_lnum, target_colnum] = s:get_field_coordinates_rfc(table_ranges, relative_record_num, field_num)
+    call cursor(target_lnum, target_colnum)
+endfunc
+
+
+func! rainbow_csv#cell_jump(direction)
+    if !exists("b:rbcsv") || b:rbcsv != 1
+        return
+    endif
+    let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
+    if policy == 'monocolumn'
+        return
+    endif
+    if policy == 'quoted_rfc'
+        call s:cell_jump_rfc(a:direction, delim, comment_prefix)
+    else
+        call s:cell_jump_simple(a:direction, delim, policy, comment_prefix)
     endif
 endfunc
 
@@ -1086,18 +1233,22 @@ func! rainbow_csv#provide_column_info_on_hover()
     endif
     let fields = []
     let col_num = 0
+    let num_fields = 0
+    let cur_col = col('.')
     if policy == 'quoted_rfc'
-        let report = s:get_col_num_rfc_lines(line, delim, len(header))
-        if len(report) != 2
+        let cur_line = line('.')
+        let [neighboring_lines, neighboring_line_nums] = s:get_neighboring_lines(cur_line)
+        let table_ranges = rainbow_csv#parse_document_range_rfc(neighboring_lines, neighboring_line_nums, delim, comment_prefix)
+        let [_unused_record_num, col_num] = rainbow_csv#get_relative_record_num_and_field_num_containing_position(table_ranges, cur_line, cur_col)
+        if col_num == -1
             echo ''
             return
         endif
-        let [fields, col_num] = report
     else
         let fields = rainbow_csv#preserving_smart_split(line, delim, policy)[0]
-        let col_num = s:get_col_num_single_line(fields, delim, 0)
+        let col_num = rainbow_csv#get_field_num_single_line(fields, delim, cur_col)
+        let num_fields = len(fields)
     endif
-    let num_cols = len(fields)
 
     let ui_message = printf('Col %s', col_num + 1)
     let col_name = ''
@@ -1112,11 +1263,11 @@ func! rainbow_csv#provide_column_info_on_hover()
     if col_name != ""
         let ui_message = ui_message . printf(', %s', col_name)
     endif
-    if len(header) != num_cols
+    if len(header) != num_fields
         let ui_message = ui_message . '; WARN: num of fields in Header and this line differs'
     endif
     if exists("b:root_table_name")
-        let ui_message = ui_message . printf('; F7: Copy to %s', b:root_table_name)
+        let ui_message = ui_message . printf('; Run `:RainbowCopyBack` Copy to %s', b:root_table_name)
     endif
     echo ui_message
 endfunc
@@ -1399,10 +1550,6 @@ func! rainbow_csv#select_from_file()
     let b:table_buf_number = buf_number
     let b:rainbow_select = 1
 
-    if !exists("g:disable_rainbow_key_mappings")
-        nnoremap <buffer> <F5> :RbRun<cr>
-    endif
-
     call s:generate_microlang_syntax(num_fields)
     if !already_exists
         if meta_language == "python"
@@ -1413,16 +1560,22 @@ func! rainbow_csv#select_from_file()
             call s:make_rbql_demo(num_fields, rbql_welcome_js_path)
         endif
     endif
+    redraw!
+    echo "Execute `:RainbowQuery` again to run the query."
 endfunc
 
 
-func! rainbow_csv#copy_file_content_to_buf(src_file_path, dst_buf_no)
+func! rainbow_csv#copy_data_back()
+    if !exists('b:root_table_buf_number')
+        echoerr "Unable to copy back: Something went wrong."
+    endif
+    let source_file_path = resolve(expand("%:p"))
     bd!
     redraw!
     echo "executing..."
-    execute "buffer " . a:dst_buf_no
+    execute "buffer " . b:dst_buf_no
     call rainbow_csv#clear_current_buf_content()
-    let lines = readfile(a:src_file_path)
+    let lines = readfile(source_file_path)
     call setline(1, lines)
 endfunc
 
@@ -1561,10 +1714,6 @@ func! s:converged_select(table_buf_number, rb_script_path, query_buf_nr)
     let b:self_buf_number = bufnr("%")
     call setbufvar(a:table_buf_number, 'selected_buf', b:self_buf_number)
 
-    if !exists("g:disable_rainbow_key_mappings")
-        nnoremap <buffer> <F7> :call rainbow_csv#copy_file_content_to_buf(b:self_path, b:root_table_buf_number)<cr>
-    endif
-
     if len(psv_warning_report)
         let warnings = split(psv_warning_report, "\n")
         for wnum in range(len(warnings))
@@ -1618,6 +1767,15 @@ func! rainbow_csv#finish_query_editing()
     let query_buf_nr = bufnr("%")
     let table_buf_number = b:table_buf_number
     call s:converged_select(table_buf_number, rb_script_path, query_buf_nr)
+endfunc
+
+
+func! rainbow_csv#start_or_finish_query_editing()
+    if exists("b:rainbow_select")
+        call rainbow_csv#finish_query_editing()
+    else
+        call rainbow_csv#select_from_file()
+    endif
 endfunc
 
 
@@ -1699,13 +1857,10 @@ endfunc
 
 
 func! rainbow_csv#buffer_disable_rainbow_features()
-    let b:rainbow_features_enabled = 0
+    let b:rbcsv = 0
     augroup RainbowHintGrp
         autocmd! CursorMoved <buffer>
     augroup END
-    if !exists("g:disable_rainbow_key_mappings")
-        unmap <buffer> <F5>
-    endif
 endfunc
 
 
@@ -1714,7 +1869,7 @@ func! rainbow_csv#buffer_enable_rainbow_features()
         call rainbow_csv#buffer_disable_rainbow_features()
     endif
 
-    let b:rainbow_features_enabled = 1
+    let b:rbcsv = 1
 
     set laststatus=2
 
@@ -1724,10 +1879,6 @@ func! rainbow_csv#buffer_enable_rainbow_features()
 
     " maybe use setlocal number ?
     set number
-
-    if !exists("g:disable_rainbow_key_mappings")
-        nnoremap <buffer> <F5> :RbSelect<cr>
-    endif
 
     highlight status_line_default_hl ctermbg=black guibg=black
 
@@ -1844,7 +1995,7 @@ func! rainbow_csv#handle_new_file()
         let table_params = s:guess_table_params_from_content_frequency_based()
     endif
     if !len(table_params)
-        let b:rainbow_features_enabled = 0
+        let b:rbcsv = 0
         return
     endif
     call rainbow_csv#set_rainbow_filetype(table_params[0], table_params[1], s:get_auto_comment_prefix())
@@ -1857,8 +2008,8 @@ func! rainbow_csv#handle_buffer_enter()
         call rainbow_csv#init_rb_color_groups()
     endif
 
-    if exists("b:rainbow_features_enabled")
-        if b:rainbow_features_enabled
+    if exists("b:rbcsv")
+        if b:rbcsv
             " This is a workaround against Vim glitches. sometimes it 'forgets' to highlight the file even when ft=csv, see https://stackoverflow.com/questions/14779299/syntax-highlighting-randomly-disappears-during-file-saving
             " From the other hand it can discard highlight ":hi ... " rules from user config, so let's disable this for now
             " syntax enable
@@ -1886,7 +2037,7 @@ func! rainbow_csv#handle_buffer_enter()
     if len(table_params)
         " 'disabled' is just for backward compatibility, it is an alias to 'monocolumn'
         if table_params[1] == 'disabled' || table_params[1] == 'monocolumn'
-            let b:rainbow_features_enabled = 0
+            let b:rbcsv = 0
         else
             call rainbow_csv#set_rainbow_filetype(table_params[0], table_params[1], table_params[2])
         endif
