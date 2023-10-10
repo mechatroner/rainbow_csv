@@ -160,6 +160,13 @@ E.g. `:Select a1, a2 order by a1`
 Allows to enter RBQL update query as vim command.  
 E.g. `:Update a1 = a1 + " " + a2`
 
+#### :RainbowQuery
+
+Enter RBQL Query editing mode.  
+When in the query editing mode, execute `:RainbowQuery` again to run the query.  
+Consider mapping `:RainbowQuery` to `<F5>` key i.e. `nnoremap <F5> :RainbowQuery<CR>`
+
+
 #### :RainbowName \<name\>
 
 Assign any name to the current table. You can use this name in join operation instead of the table path. E.g.

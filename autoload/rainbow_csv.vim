@@ -1489,8 +1489,6 @@ func! s:make_select_line(num_fields)
 endfunc
 
 
-" FIXME document RainbowQuery replacement (both in README and in vim docs)
-" FIXME update welcome_py.rbql and welcome_js.rbql - get rid of F5 map mentions.
 func! s:make_rbql_demo(num_fields, rbql_welcome_path)
     let select_line = s:make_select_line(a:num_fields)
     let lines = readfile(a:rbql_welcome_path)
