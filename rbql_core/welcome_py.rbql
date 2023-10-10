@@ -4,7 +4,7 @@
 # "a1", "a2", etc are column names.
 # You can use them in Python expressions, e.g. "int(a1) * 20 + len(a2) * random.randint(1, 10)"
 # If your file has header line set `let g:rbql_with_headers = 1` or add `WITH (header)` at the end of your query.
-# To run the query press F5.
+# To run the query execute `:RainbowQuery` command.
 # For more info visit https://github.com/mechatroner/rainbow_csv
 
 
@@ -44,4 +44,4 @@
 # 1. Ensure you have Node.js installed
 # 2. Add "let g:rbql_backend_language = ''js''" to your .vimrc
 # 3. Execute ":let g:rbql_backend_language = ''js''"
-# 4. Exit this buffer and run F5 again
+# 4. Exit this buffer and run `:RainbowQuery` again
