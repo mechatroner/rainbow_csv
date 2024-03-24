@@ -1592,7 +1592,7 @@ endfunc
 
 
 func! rainbow_csv#parse_report(report_content)
-    let lines = split(a:report_content, "\n")
+    let lines = split(a:report_content, '\r\?\n')
     let psv_warning_report = ''
     let psv_error_report = ''
     let psv_query_status = (len(lines) > 0 && len(lines[0]) > 0) ? lines[0] : 'Unknown error'
