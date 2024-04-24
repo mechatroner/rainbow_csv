@@ -1401,6 +1401,7 @@ func! rainbow_csv#set_statusline_columns()
     if !exists("b:statusline_before")
         let b:statusline_before = &statusline
     endif
+    " TODO consider setting laststatus=2 here, first we would preserve the original value so that we can restore it later just like b:statusline_before logic does.
     let has_number_column = &number
     let indent = ''
     if has_number_column
@@ -1871,14 +1872,9 @@ func! rainbow_csv#buffer_enable_rainbow_features()
 
     let b:rbcsv = 1
 
-    set laststatus=2
-
     if &compatible == 1
         set nocompatible
     endif
-
-    " maybe use setlocal number ?
-    set number
 
     highlight status_line_default_hl ctermbg=black guibg=black
 
