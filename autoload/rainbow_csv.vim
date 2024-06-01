@@ -1570,11 +1570,13 @@ func! rainbow_csv#copy_data_back()
     if !exists('b:root_table_buf_number')
         echoerr "Unable to copy back: Something went wrong."
     endif
+    " Save root buf number into a temporary var because we are deleting the buffer and all of its vars.
+    let dst_buf_no = b:root_table_buf_number
     let source_file_path = resolve(expand("%:p"))
     bd!
     redraw!
     echo "executing..."
-    execute "buffer " . b:dst_buf_no
+    execute "buffer " . dst_buf_no
     call rainbow_csv#clear_current_buf_content()
     let lines = readfile(source_file_path)
     call setline(1, lines)
