@@ -17,7 +17,7 @@ let s:system_python_interpreter = ''
 
 let s:magic_chars = '^*$.~/[]\'
 
-let s:named_syntax_map = {'csv': [',', 'quoted', ''], 'csv_semicolon': [';', 'quoted', ''], 'tsv': ["\t", 'simple', ''], 'csv_pipe': ['|', 'simple', ''], 'csv_whitespace': [" ", 'whitespace', ''], 'rfc_csv': [',', 'quoted_rfc', ''], 'rfc_semicolon': [';', 'quoted_rfc', '']}
+let s:named_syntax_map = {'csv': [',', 'quoted', ''], 'csv_semicolon': [';', 'quoted', ''], 'tsv': ["\t", 'simple', ''], 'csv_pipe': ['|', 'simple', ''], 'csv_whitespace': [" ", 'whitespace', ''], 'rfc_csv': [',', 'quoted_rfc', ''], 'rfc_semicolon': [';', 'quoted_rfc', ''], 'markdown':['|', 'simple', ''], 'rmd':['|', 'simple', '']}
 
 let s:autodetection_delims = exists('g:rcsv_delimiters') ? g:rcsv_delimiters : ["\t", ",", ";", "|"]
 
@@ -761,13 +761,12 @@ func! rainbow_csv#adjust_column_stats(column_stats)
     return adjusted_stats
 endfunc
 
-
-func! s:calc_column_stats(delim, policy, comment_prefix, progress_bucket_size)
+func! s:calc_column_stats(delim, policy, comment_prefix, progress_bucket_size, first_line, last_line)
     " Result `column_stats` is a list of (max_total_len, max_int_part_len, max_fractional_part_len) tuples.
     let column_stats = []
-    let lastLineNo = line("$")
-    let is_first_line = 1
-    for linenum in range(1, lastLineNo)
+    let lastLineNo = a:last_line
+    let is_first_line = a:first_line
+    for linenum in range(a:first_line, lastLineNo)
         if (a:progress_bucket_size && linenum % a:progress_bucket_size == 0)
             let s:align_progress_bar_position = s:align_progress_bar_position + 1
             call s:display_progress_bar(s:align_progress_bar_position)
@@ -791,7 +790,6 @@ func! s:calc_column_stats(delim, policy, comment_prefix, progress_bucket_size)
     endfor
     return [column_stats, 0]
 endfunc
-
 
 func! rainbow_csv#align_field(field, is_first_line, max_field_components_lens, is_last_column)
     " Align field, use max() to avoid negative delta_length which can happen theorethically due to async doc edit.
@@ -820,40 +818,49 @@ func! rainbow_csv#align_field(field, is_first_line, max_field_components_lens, i
     return repeat(' ', integer_delta_length) . clean_field . trailing_spaces
 endfunc
 
-
-func! rainbow_csv#csv_align()
+func! rainbow_csv#csv_align(...)
     " The first (statistic) pass of the function takes about 40% of runtime, the second (actual align) pass around 60% of runtime.
     " Numeric-aware logic by itself adds about 50% runtime compared to the basic string-based field width alignment
     " If there are lot of numeric columns this can additionally increase runtime by another 50% or more.
-    let show_progress_bar = wordcount()['bytes'] > 200000
+    let show_progress_bar = (a:2 - a:1) > 200000
     let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
     if policy == 'monocolumn'
-        echoerr "RainbowAlign is available only for highlighted CSV files"
+        echoerr "RainbowAlign[Range] is available only for highlighted CSV files"
         return
     endif
     if policy == 'quoted_rfc'
-        echoerr 'RainbowAlign not available for "rfc_csv" filetypes, consider using "csv" instead'
+        echoerr 'RainbowAlign[Range] not available for "rfc_csv" filetypes, consider using "csv" instead'
         return
     endif
-    let lastLineNo = line("$")
+
+    if (a:1 == 1 && a:2 == line("$") && (&ft == 'markdown' || &ft == 'rmd'))
+        echoerr "RainbowAlign is available only for highlighted CSV files; try RainbowAlignRange"
+        return
+    endif
+
+    let lastLineNo = a:2
     let progress_bucket_size = (lastLineNo * 2) / s:progress_bar_size " multiply by 2 because we have two passes.
     if !show_progress_bar || progress_bucket_size < 10
         let progress_bucket_size = 0
     endif
     let s:align_progress_bar_position = 0
-    let [column_stats, first_failed_line] = s:calc_column_stats(delim, policy, comment_prefix, progress_bucket_size)
+
+    let [column_stats, first_failed_line] = s:calc_column_stats(delim, policy, comment_prefix, progress_bucket_size,a:1,a:2)
     if first_failed_line != 0
         echoerr 'Unable to allign: Inconsistent double quotes at line ' . first_failed_line
         return
     endif
+
     let column_stats = rainbow_csv#adjust_column_stats(column_stats)
     if !len(column_stats)
         echoerr 'Unable to allign: Internal Rainbow CSV Error'
         return
     endif
+
     let has_edit = 0
-    let is_first_line = 1
-    for linenum in range(1, lastLineNo)
+
+    let is_first_line = a:1
+    for linenum in range(a:1, lastLineNo)
         if (progress_bucket_size && linenum % progress_bucket_size == 0)
             let s:align_progress_bar_position = s:align_progress_bar_position + 1
             call s:display_progress_bar(s:align_progress_bar_position)
@@ -883,10 +890,9 @@ func! rainbow_csv#csv_align()
         let is_first_line = 0
     endfor
     if !has_edit
-        echoerr "File is already aligned"
+        echoerr "Range is already aligned"
     endif
 endfunc
-
 
 func! rainbow_csv#csv_shrink()
     let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
@@ -1119,7 +1125,7 @@ func! s:cell_jump_simple(direction, delim, policy, comment_prefix)
     if a:direction == 'down' || a:direction == 'up'
         let lastLineNo = line("$")
         let cur_line_num = anchor_line_num
-        while 1 
+        while 1
             if a:direction == 'down'
                 let cur_line_num += 1
             else
@@ -1181,7 +1187,7 @@ func! s:cell_jump_rfc(direction, delim, comment_prefix)
         let field_num += 1
     elseif a:direction == 'left'
         let field_num -= 1
-    elseif a:direction == 'down' 
+    elseif a:direction == 'down'
         let relative_record_num += 1
     elseif a:direction == 'up'
         let relative_record_num -= 1
