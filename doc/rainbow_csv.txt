@@ -32,7 +32,7 @@ There are 4 ways to enable csv columns highlighting:
 3.  Manual CSV delimiter selection with |:RainbowMultiDelim| for multi-character delimiters
 4.  Execute `:set ft=csv` or `:set ft=tsv` for CSV/TSV dialects. For other separators use |:RainbowDelim|
 
-To run an RBQL query either use |:Select| command  e.g. ":Select a1, a2" or run |:RainbowQuery| command to enter query editing mode.  
+To run an RBQL query either use |:Select| command  e.g. ":Select a1, a2" or run |:RainbowQuery| command to enter query editing mode.
 As soon as you finish entering "select" (or update) and press whitespace, the plugin will show column names in the status line.
 
 The core functionality of the plugin is written in pure vimscript, no additional libraries required.
@@ -75,6 +75,10 @@ In rare cases some CSV files can contain double-quoted fields spanning multiple 
 To work with such files you can set filetype to either "rfc_csv" or "rfc_semicolon".
 Syntax highlighting for rfc_csv and rfc_semicolon dialects can go out of sync with the file content under specific conditions, use `:syntax sync fromstart` command in that case
 
+Working with markdown and rmd files ~
+You can use |:RainbowAlign| and |:RainbowShrink| by providing an address range
+or visual range to either function.
+
 ==============================================================================
 2. Commands                                              *rainbow_csv-commands*
 
@@ -102,22 +106,22 @@ Disable rainbow columns highlighting for the current file.
 
 *:RainbowCellGoUp*
 
-Move cursor one cell up.  
+Move cursor one cell up.
 Consider mapping this to Ctrl+[Up Arrow], see the "Key Mappings" section.
 
 *:RainbowCellGoDown*
 
-Move cursor one cell down.  
+Move cursor one cell down.
 Consider mapping this to Ctrl+[Down Arrow], see the "Key Mappings" section.
 
 *:RainbowCellGoLeft*
 
-Move cursor one cell left.  
+Move cursor one cell left.
 Consider mapping this to Ctrl+[Left Arrow], see the "Key Mappings" section.
 
 *:RainbowCellGoRight*
 
-Move cursor one cell right.  
+Move cursor one cell right.
 Consider mapping this to Ctrl+[Right Arrow], see the "Key Mappings" section.
 
 
@@ -168,8 +172,8 @@ Example >
 
 *:RainbowQuery*
 
-Enter RBQL Query editing mode.  
-When in the query editing mode, execute |:RainbowQuery| again to run the query.  
+Enter RBQL Query editing mode.
+When in the query editing mode, execute |:RainbowQuery| again to run the query.
 Consider mapping |:RainbowQuery| to <F5> key i.e.
 >
   nnoremap <F5> :RainbowQuery<CR>
@@ -194,8 +198,8 @@ Replace the content of the original file that was used to run the RBQL query wit
 ==============================================================================
 3. Key Mappings                                              *rainbow_csv-key_mappings*
 
-Plugin does not create any new key mappings, but you can define your own in your .vimrc file.  
-All highlighted files have a special buffer variable |b:rbcsv| set to 1, so you can use this to define conditional csv-only key mappings.  
+Plugin does not create any new key mappings, but you can define your own in your .vimrc file.
+All highlighted files have a special buffer variable |b:rbcsv| set to 1, so you can use this to define conditional csv-only key mappings.
 For example, to conditionally map Ctrl+Arrow keys to cell navigation commands you can use this snippet:
 >
   nnoremap <expr> <C-Left> get(b:, 'rbcsv', 0) == 1 ? ':RainbowCellGoLeft<CR>' : '<C-Left>'
