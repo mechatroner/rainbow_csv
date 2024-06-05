@@ -818,34 +818,36 @@ func! rainbow_csv#align_field(field, is_first_line, max_field_components_lens, i
     return repeat(' ', integer_delta_length) . clean_field . trailing_spaces
 endfunc
 
-func! rainbow_csv#csv_align(...)
+func! rainbow_csv#csv_align() range
+    let l:firstline = a:firstline
+    let l:lastline = a:lastline
     " The first (statistic) pass of the function takes about 40% of runtime, the second (actual align) pass around 60% of runtime.
     " Numeric-aware logic by itself adds about 50% runtime compared to the basic string-based field width alignment
     " If there are lot of numeric columns this can additionally increase runtime by another 50% or more.
-    let show_progress_bar = (a:2 - a:1) > 200000
+    let show_progress_bar = (l:lastline - l:firstline) > 200000
     let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
     if policy == 'monocolumn'
-        echoerr "RainbowAlign[Range] is available only for highlighted CSV files"
+        echoerr "RainbowAlign is available only for highlighted CSV files"
         return
     endif
     if policy == 'quoted_rfc'
-        echoerr 'RainbowAlign[Range] not available for "rfc_csv" filetypes, consider using "csv" instead'
+        echoerr 'RainbowAlign not available for "rfc_csv" filetypes, consider using "csv" instead'
         return
     endif
 
-    if (a:1 == 1 && a:2 == line("$") && (&ft == 'markdown' || &ft == 'rmd'))
-        echoerr "RainbowAlign is available only for highlighted CSV files; try RainbowAlignRange"
+    if (l:firstline == 1 && l:lastline == line("$") && (&ft == 'markdown' || &ft == 'rmd'))
+        echoerr "RainbowAlign requires an address range in markdown and rmd files"
         return
     endif
 
-    let lastLineNo = a:2
+    let lastLineNo = l:lastline
     let progress_bucket_size = (lastLineNo * 2) / s:progress_bar_size " multiply by 2 because we have two passes.
     if !show_progress_bar || progress_bucket_size < 10
         let progress_bucket_size = 0
     endif
     let s:align_progress_bar_position = 0
 
-    let [column_stats, first_failed_line] = s:calc_column_stats(delim, policy, comment_prefix, progress_bucket_size,a:1,a:2)
+    let [column_stats, first_failed_line] = s:calc_column_stats(delim, policy, comment_prefix, progress_bucket_size,l:firstline,l:lastline)
     if first_failed_line != 0
         echoerr 'Unable to allign: Inconsistent double quotes at line ' . first_failed_line
         return
@@ -859,8 +861,8 @@ func! rainbow_csv#csv_align(...)
 
     let has_edit = 0
 
-    let is_first_line = a:1
-    for linenum in range(a:1, lastLineNo)
+    let is_first_line = l:firstline
+    for linenum in range(l:firstline, lastLineNo)
         if (progress_bucket_size && linenum % progress_bucket_size == 0)
             let s:align_progress_bar_position = s:align_progress_bar_position + 1
             call s:display_progress_bar(s:align_progress_bar_position)
@@ -894,7 +896,9 @@ func! rainbow_csv#csv_align(...)
     endif
 endfunc
 
-func! rainbow_csv#csv_shrink()
+func! rainbow_csv#csv_shrink() range
+    let l:firstline = a:firstline
+    let l:lastline = a:lastline
     let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
     if policy == 'monocolumn'
         echoerr "RainbowShrink is available only for highlighted CSV files"
@@ -904,15 +908,21 @@ func! rainbow_csv#csv_shrink()
         echoerr 'RainbowShrink not available for "rfc_csv" filetypes, consider using "csv" instead'
         return
     endif
-    let lastLineNo = line("$")
+
+    if (l:firstline == 1 && l:lastline == line("$") && (&ft == 'markdown' || &ft == 'rmd'))
+        echoerr "RainbowShrink requires an address range in markdown and rmd files"
+        return
+    endif
+
+    let lastLineNo = l:lastline
     let has_edit = 0
-    let show_progress_bar = wordcount()['bytes'] > 200000
+    let show_progress_bar = (l:lastline - l:firstline) > 200000
     let progress_bucket_size = lastLineNo / s:progress_bar_size
     if !show_progress_bar || progress_bucket_size < 10
         let progress_bucket_size = 0
     endif
     let s:align_progress_bar_position = 0
-    for linenum in range(1, lastLineNo)
+    for linenum in range(l:firstline, lastLineNo)
         if (progress_bucket_size && linenum % progress_bucket_size == 0)
             let s:align_progress_bar_position = s:align_progress_bar_position + 1
             call s:display_progress_bar(s:align_progress_bar_position)
