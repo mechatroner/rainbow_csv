@@ -149,11 +149,12 @@ The linter checks the following:
 Align CSV columns with whitespaces.
 Don't run this command if you treat leading and trailing whitespaces in fields as part of the data.
 You can edit aligned CSV file in Vim column-edit mode (<Ctrl+v>).
-
+With markdown and rmd filetypes, the pipe separator is used by default. These filetypes also require that either an address range or visual selection be provided to the function.
 
 *:RainbowShrink*
 
 Remove leading and trailing whitespaces from all fields. Opposite to RainbowAlign
+With markdown and rmd filetypes, the pipe separator is used by default. These filetypes also require that either an address range or visual selection be provided to the function.
 
 
 *:Select* {...}

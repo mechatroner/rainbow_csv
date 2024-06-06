@@ -38,17 +38,16 @@ Each Rainbow CSV filetype is mapped to a separator and "policy" which describes 
 If you run `:RainbowDelim` or `:RainbowMultiDelim` to select a separator that doesn't map to one of the built-in filetypes, Rainbow CSV will dynamically generate the filetype syntax file and put it into the "syntax" folder.
 List of built-in filetypes:
 
-|Filetype        |Separator       |Extension   |Properties                                            |
-|--------------- |--------------- |----------- |----------------------------------------------------- |
-|csv             |, (comma)       |.csv        |Ignored inside double-quoted fields                   |
-|tsv             |\t (TAB)        |.tsv .tab   |                                                      |
-|csv_semicolon   |; (semicolon)   |            |Ignored inside double-quoted fields                   |
-|csv_whitespace  |whitespace      |            |Consecutive whitespaces are merged                    |
-|csv_pipe        |&#124; (pipe)   |            |                                                      |
-|rfc_csv         |, (comma)       |            |Same as "csv" but allows multiline fields             |
-|rfc_semicolon   |; (semicolon)   |            |Same as "csv_semicolon" but allows multiline fields   |
-|markdown        |&#124; (pipe)   |.md         |align and shrink functions only operate on ranges     |
-|rmd             |&#124; (pipe)   |.rmd        |align and shrink functions only operate on ranges     |
+|Filetype       | Separator     | Extension | Properties                                          |
+|---------------|---------------|-----------|-----------------------------------------------------|
+|csv            | , (comma)     | .csv      | Ignored inside double-quoted fields                 |
+|tsv            | \t (TAB)      | .tsv .tab |                                                     |
+|csv_semicolon  | ; (semicolon) |           | Ignored inside double-quoted fields                 |
+|csv_whitespace | whitespace    |           | Consecutive whitespaces are merged                  |
+|csv_pipe       | &#124; (pipe) |           |                                                     |
+|rfc_csv        | , (comma)     |           | Same as "csv" but allows multiline fields           |
+|rfc_semicolon  | ; (semicolon) |           | Same as "csv_semicolon" but allows multiline fields |
+
 
 ### Associating file extensions with CSV dialects
 In most cases the built-in autodetection algorithm should correctly detect correct CSV dialect for all CSV tables that you open in Vim, but if you have disabled the autodetection algorithm or don't want to rely on it for some reason, you can manually associate file extensions with available csv dialects.
@@ -146,12 +145,12 @@ The linter checks the following:
 Align CSV columns with whitespaces.
 Don't run this command if you treat leading and trailing whitespaces in fields as part of the data.
 You can edit aligned CSV file in Vim column-edit mode (Ctrl+v).
-In markdown and r-markdown files, this function requires a range of addresses or a visual range selection.
+With markdown and rmd filetypes, the pipe separator is used by default. These filetypes also require that either an address range or visual selection be provided to the function.
 
 #### :RainbowShrink
 
 Remove leading and trailing whitespaces from all fields. Opposite to RainbowAlign
-In markdown and r-markdown files, this function requires a range of addresses or a visual range selection.
+With markdown and rmd filetypes, the pipe separator is used by default. These filetypes also require that either an address range or visual selection be provided to the function.
 
 #### :Select ...
 
