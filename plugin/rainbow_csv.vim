@@ -30,8 +30,8 @@ command! NoRainbowComment call rainbow_csv#manual_disable_comment_prefix()
 
 command! RainbowLint call rainbow_csv#csv_lint()
 command! CSVLint call rainbow_csv#csv_lint()
-command! -range=% RainbowAlign <line1>,<line2>call rainbow_csv#csv_align()
-command! -range=% RainbowShrink <line1>,<line2>call rainbow_csv#csv_shrink()
+command! -range=% RainbowAlign <line1>,<line2>call rainbow_csv#csv_align(<range>)
+command! -range=% RainbowShrink <line1>,<line2>call rainbow_csv#csv_shrink(<range>)
 
 command! RainbowQuery call rainbow_csv#start_or_finish_query_editing()
 command! -nargs=+ Select call rainbow_csv#run_select_cmd_query(<q-args>)
