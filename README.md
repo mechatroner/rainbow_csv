@@ -292,6 +292,11 @@ If most of the CSV files that you work with have headers, you can set this value
 Example: `:let g:rbql_with_headers = 1`  
 You can also adjust (or override) this setting by adding `WITH (header)` or `WITH (noheader)` to the end of your RBQL queries.
 
+#### g:rbql_trim_spaces
+Default: `1`  
+Trim/Strip all trailing and leading spaces in all fields when running RBQL.  
+Set to `0` to preserve leading and trailing spaces in output, this might also slightly improve performance.
+
 
 # RBQL (Rainbow Query Language) Description
 
