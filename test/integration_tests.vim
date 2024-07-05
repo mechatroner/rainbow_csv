@@ -271,7 +271,7 @@
 :Select a3, a2, a2 + ' adjusted', a1
 :sleep 1
 :let file_size = getfsize(expand(@%))
-:let log_msg = (file_size == 547) ? 'OK' : 'FAIL: synthetic_rfc_newline_data.csv'
+:let log_msg = (file_size == 541) ? 'OK' : 'FAIL: synthetic_rfc_newline_data.csv. 541 chars for non-trim select, 547 for trim select'
 :call add(g:rbql_test_log_records, log_msg)
 
 
