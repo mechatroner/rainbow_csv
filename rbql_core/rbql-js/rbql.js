@@ -289,6 +289,24 @@ function parse_number(val) {
 }
 
 
+class AnyValueAggregator {
+    constructor() {
+        this.stats = new Map();
+    }
+
+    increment(key, val) {
+        var cur_aggr = this.stats.get(key);
+        if (cur_aggr === undefined) {
+            this.stats.set(key, val);
+        }
+    }
+
+    get_final(key) {
+        return this.stats.get(key);
+    }
+}
+
+
 class MinAggregator {
     constructor() {
         this.stats = new Map();
@@ -308,7 +326,6 @@ class MinAggregator {
         return this.stats.get(key);
     }
 }
-
 
 
 class MaxAggregator {
@@ -514,13 +531,17 @@ function init_aggregator(generator_name, val, post_proc=null) {
     return res;
 }
 
+function ANY_VALUE(val) {
+    return query_context.aggregation_stage < 2 ? init_aggregator(AnyValueAggregator, val) : val;
+}
+const any_value = ANY_VALUE;
+const Any_value = ANY_VALUE;
 
 function MIN(val) {
     return query_context.aggregation_stage < 2 ? init_aggregator(MinAggregator, val) : val;
 }
 const min = MIN;
 const Min = MIN;
-
 
 function MAX(val) {
     return query_context.aggregation_stage < 2 ? init_aggregator(MaxAggregator, val) : val;

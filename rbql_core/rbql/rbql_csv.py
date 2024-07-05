@@ -329,7 +329,7 @@ class CSVWriter(rbql_engine.RBQLOutputWriter):
 
 
 class CSVRecordIterator(rbql_engine.RBQLInputIterator):
-    def __init__(self, stream, encoding, delim, policy, has_header=False, comment_prefix=None, table_name='input', variable_prefix='a', chunk_size=1024, line_mode=False):
+    def __init__(self, stream, encoding, delim, policy, has_header=False, comment_prefix=None, table_name='input', variable_prefix='a', chunk_size=1024, line_mode=False, strip_whitespaces=False):
         assert encoding in ['utf-8', 'latin-1', None]
         self.encoding = encoding
         self.stream = encode_input_stream(stream, encoding)
@@ -338,6 +338,8 @@ class CSVRecordIterator(rbql_engine.RBQLInputIterator):
         self.table_name = table_name
         self.variable_prefix = variable_prefix
         self.comment_prefix = comment_prefix if (comment_prefix is not None and len(comment_prefix)) else None
+        # FIXME add unit test for this, test both strip and non-strip with file that contains some extra whitespaces, both Python and JS.
+        self.strip_whitespaces = strip_whitespaces
 
         self.buffer = ''
         self.detected_line_separator = '\n'
@@ -464,6 +466,8 @@ class CSVRecordIterator(rbql_engine.RBQLInputIterator):
                 break
         self.NR += 1
         record, warning = csv_utils.smart_split(line, self.delim, self.policy, preserve_quotes_and_whitespaces=False)
+        if self.strip_whitespaces:
+            record = [v.strip() for v in record]
         if warning:
             if self.first_defective_line is None:
                 self.first_defective_line = self.NL
@@ -509,7 +513,7 @@ class CSVRecordIterator(rbql_engine.RBQLInputIterator):
 
 
 class FileSystemCSVRegistry(rbql_engine.RBQLTableRegistry):
-    def __init__(self, input_file_dir, delim, policy, encoding, has_header, comment_prefix):
+    def __init__(self, input_file_dir, delim, policy, encoding, has_header, comment_prefix, strip_whitespaces):
         self.input_file_dir = input_file_dir
         self.delim = delim
         self.policy = policy
@@ -518,6 +522,7 @@ class FileSystemCSVRegistry(rbql_engine.RBQLTableRegistry):
         self.input_stream = None
         self.has_header = has_header
         self.comment_prefix = comment_prefix
+        self.strip_whitespaces = strip_whitespaces
         self.table_path = None
 
     def get_iterator_by_table_id(self, table_id, single_char_alias):
@@ -525,7 +530,7 @@ class FileSystemCSVRegistry(rbql_engine.RBQLTableRegistry):
         if self.table_path is None:
             raise rbql_engine.RbqlIOHandlingError('Unable to find join table "{}"'.format(table_id))
         self.input_stream = open(self.table_path, 'rb')
-        self.record_iterator = CSVRecordIterator(self.input_stream, self.encoding, self.delim, self.policy, self.has_header, comment_prefix=self.comment_prefix, table_name=table_id, variable_prefix=single_char_alias)
+        self.record_iterator = CSVRecordIterator(self.input_stream, self.encoding, self.delim, self.policy, self.has_header, comment_prefix=self.comment_prefix, table_name=table_id, variable_prefix=single_char_alias, strip_whitespaces=self.strip_whitespaces)
         return self.record_iterator
 
     def finish(self):
@@ -539,7 +544,7 @@ class FileSystemCSVRegistry(rbql_engine.RBQLTableRegistry):
         return result
 
 
-def query_csv(query_text, input_path, input_delim, input_policy, output_path, output_delim, output_policy, csv_encoding, output_warnings, with_headers, comment_prefix=None, user_init_code='', colorize_output=False):
+def query_csv(query_text, input_path, input_delim, input_policy, output_path, output_delim, output_policy, csv_encoding, output_warnings, with_headers, comment_prefix=None, user_init_code='', colorize_output=False, strip_whitespaces=False):
     output_stream, close_output_on_finish = (None, False)
     input_stream, close_input_on_finish = (None, False)
     join_tables_registry = None
@@ -563,8 +568,8 @@ def query_csv(query_text, input_path, input_delim, input_policy, output_path, ou
             user_init_code = read_user_init_code(default_init_source_path)
 
         input_file_dir = None if not input_path else os.path.dirname(input_path)
-        join_tables_registry = FileSystemCSVRegistry(input_file_dir, input_delim, input_policy, csv_encoding, with_headers, comment_prefix)
-        input_iterator = CSVRecordIterator(input_stream, csv_encoding, input_delim, input_policy, with_headers, comment_prefix=comment_prefix)
+        join_tables_registry = FileSystemCSVRegistry(input_file_dir, input_delim, input_policy, csv_encoding, with_headers, comment_prefix, strip_whitespaces)
+        input_iterator = CSVRecordIterator(input_stream, csv_encoding, input_delim, input_policy, with_headers, comment_prefix=comment_prefix, strip_whitespaces=strip_whitespaces)
         output_writer = CSVWriter(output_stream, close_output_on_finish, csv_encoding, output_delim, output_policy, colorize_output=colorize_output)
         if debug_mode:
             rbql_engine.set_debug_mode()

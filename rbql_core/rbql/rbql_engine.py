@@ -310,6 +310,18 @@ class NumHandler:
             raise RbqlRuntimeError(numeric_conversion_error.format(val)) # UT JSON
 
 
+class AnyValueAggregator:
+    def __init__(self):
+        self.stats = dict()
+
+    def increment(self, key, val):
+        if key not in self.stats:
+            self.stats[key] = val
+
+    def get_final(self, key):
+        return self.stats[key]
+
+
 class MinAggregator:
     def __init__(self):
         self.stats = dict()
@@ -693,7 +705,7 @@ if not query_context.writer.write(up_fields):
 
 # We need dummy_wrapper_for_exec function because otherwise "import" statements won't work as expected if used inside user-defined functions, see: https://github.com/mechatroner/sublime_rainbow_csv/issues/22
 MAIN_LOOP_BODY = '''
-def dummy_wrapper_for_exec(query_context, user_namespace, LIKE, UNNEST, MIN, MAX, COUNT, SUM, AVG, VARIANCE, MEDIAN, ARRAY_AGG, mad_max, mad_min, mad_sum, select_unnested):
+def dummy_wrapper_for_exec(query_context, user_namespace, LIKE, UNNEST, ANY_VALUE, MIN, MAX, COUNT, SUM, AVG, VARIANCE, MEDIAN, ARRAY_AGG, mad_max, mad_min, mad_sum, select_unnested):
 
     try:
         pass
@@ -704,6 +716,8 @@ def dummy_wrapper_for_exec(query_context, user_namespace, LIKE, UNNEST, MIN, MAX
     like = LIKE
     unnest = UNNEST
     Unnest = UNNEST
+    any_value = ANY_VALUE
+    Any_value = ANY_VALUE
     Min = MIN
     Max = MAX
     count = COUNT
@@ -748,7 +762,7 @@ def dummy_wrapper_for_exec(query_context, user_namespace, LIKE, UNNEST, MIN, MAX
                 raise RbqlParsingError(wrong_aggregation_usage_error) # UT JSON
             raise RbqlRuntimeError('At record ' + str(NR) + ', Details: ' + str(e)) # UT JSON
 
-dummy_wrapper_for_exec(query_context, user_namespace, LIKE, UNNEST, MIN, MAX, COUNT, SUM, AVG, VARIANCE, MEDIAN, ARRAY_AGG, mad_max, mad_min, mad_sum, select_unnested)
+dummy_wrapper_for_exec(query_context, user_namespace, LIKE, UNNEST, ANY_VALUE, MIN, MAX, COUNT, SUM, AVG, VARIANCE, MEDIAN, ARRAY_AGG, mad_max, mad_min, mad_sum, select_unnested)
 '''
 
 
@@ -851,6 +865,9 @@ def compile_and_run(query_context, user_namespace, unit_test_mode=False):
             query_context.functional_aggregators.append(generator_name())
         return res
 
+
+    def ANY_VALUE(val):
+        return init_aggregator(AnyValueAggregator, val) if query_context.aggregation_stage < 2 else val
 
     def MIN(val):
         return init_aggregator(MinAggregator, val) if query_context.aggregation_stage < 2 else val

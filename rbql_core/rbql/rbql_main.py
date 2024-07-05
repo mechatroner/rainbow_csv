@@ -87,7 +87,7 @@ def run_with_python_csv(args, is_interactive):
     warnings = []
     error_type, error_msg = None, None
     try:
-        rbql_csv.query_csv(query, input_path, delim, policy, output_path, out_delim, out_policy, csv_encoding, warnings, with_headers, args.comment_prefix, user_init_code, args.color)
+        rbql_csv.query_csv(query, input_path, delim, policy, output_path, out_delim, out_policy, csv_encoding, warnings, with_headers, args.comment_prefix, user_init_code, args.color, strip_whitespaces=args.strip_spaces)
     except Exception as e:
         if args.debug_mode:
             raise
@@ -175,9 +175,9 @@ def autodetect_delim_policy(input_path, encoding, comment_prefix=None):
     return (None, None)
 
 
-def sample_records(input_path, delim, policy, encoding, comment_prefix=None):
+def sample_records(input_path, delim, policy, encoding, comment_prefix, strip_whitespaces):
     with open(input_path, 'rb') as source:
-        record_iterator = rbql_csv.CSVRecordIterator(source, encoding, delim=delim, policy=policy, comment_prefix=comment_prefix)
+        record_iterator = rbql_csv.CSVRecordIterator(source, encoding, delim=delim, policy=policy, comment_prefix=comment_prefix, strip_whitespaces=strip_whitespaces)
         sampled_records = record_iterator.get_all_records(num_rows=10);
         warnings = record_iterator.get_warnings()
         return (sampled_records, warnings)
@@ -246,7 +246,8 @@ def run_interactive_loop(mode, args):
         if success:
             print('\nOutput table preview:')
             print('====================================')
-            records, _warnings = sample_records(args.output, args.output_delim, args.output_policy, args.encoding, comment_prefix=None)
+            # Never strip whitespaces in the output preview.
+            records, _warnings = sample_records(args.output, args.output_delim, args.output_policy, args.encoding, comment_prefix=None, strip_whitespaces=False)
             print_colorized(records, args.output_delim, args.encoding, show_column_names=False, with_headers=False)
             print('====================================')
             print('Success! Result table was saved to: ' + args.output)
@@ -332,7 +333,7 @@ def start_preview_mode_csv(args):
             return
         args.delim = delim
         args.policy = policy
-    records, warnings = sample_records(input_path, delim, policy, args.encoding, args.comment_prefix)
+    records, warnings = sample_records(input_path, delim, policy, args.encoding, args.comment_prefix, args.strip_spaces)
     print('Input table preview:')
     print('====================================')
     print_colorized(records, delim, args.encoding, show_column_names=True, with_headers=args.with_headers)
@@ -387,6 +388,7 @@ def csv_main():
     parser.add_argument('--out-format', help='output format', default='input', choices=out_format_names)
     parser.add_argument('--encoding', help='manually set csv encoding', default=rbql_csv.default_csv_encoding, choices=['latin-1', 'utf-8'])
     parser.add_argument('--output', metavar='FILE', help='write output table to FILE instead of stdout')
+    parser.add_argument('--strip-spaces', action='store_true', help='strip leading and trailing whitespace chars from each input field')
     parser.add_argument('--color', action='store_true', help='colorize columns in output in non-interactive mode')
     parser.add_argument('--version', action='store_true', help='print RBQL version and exit')
     parser.add_argument('--init-source-file', metavar='FILE', help=argparse.SUPPRESS) # Path to init source file to use instead of ~/.rbql_init_source.py
