@@ -19,6 +19,8 @@ let s:magic_chars = '^*$.~/[]\'
 
 let s:named_syntax_map = {'csv': [',', 'quoted', ''], 'csv_semicolon': [';', 'quoted', ''], 'tsv': ["\t", 'simple', ''], 'csv_pipe': ['|', 'simple', ''], 'csv_whitespace': [" ", 'whitespace', ''], 'rfc_csv': [',', 'quoted_rfc', ''], 'rfc_semicolon': [';', 'quoted_rfc', '']}
 
+let s:ft_exceptions_map = {'markdown':['|','simple',''], 'rmd':['|','simple','']}
+
 let s:autodetection_delims = exists('g:rcsv_delimiters') ? g:rcsv_delimiters : ["\t", ",", ";", "|"]
 
 let s:number_regex = '^[0-9]\+\(\.[0-9]\+\)\?$'
@@ -767,12 +769,12 @@ func! rainbow_csv#adjust_column_stats(column_stats)
 endfunc
 
 
-func! s:calc_column_stats(delim, policy, comment_prefix, progress_bucket_size)
+func! s:calc_column_stats(delim, policy, comment_prefix, progress_bucket_size, first_line, last_line)
     " Result `column_stats` is a list of (max_total_len, max_int_part_len, max_fractional_part_len) tuples.
     let column_stats = []
-    let lastLineNo = line("$")
+    let lastLineNo = a:last_line
     let is_first_line = 1
-    for linenum in range(1, lastLineNo)
+    for linenum in range(a:first_line, lastLineNo)
         if (a:progress_bucket_size && linenum % a:progress_bucket_size == 0)
             let s:align_progress_bar_position = s:align_progress_bar_position + 1
             call s:display_progress_bar(s:align_progress_bar_position)
@@ -826,12 +828,25 @@ func! rainbow_csv#align_field(field, is_first_line, max_field_components_lens, i
 endfunc
 
 
-func! rainbow_csv#csv_align()
+func! rainbow_csv#csv_align(range_info) range
+    let first_line = a:firstline
+    let last_line = a:lastline
     " The first (statistic) pass of the function takes about 40% of runtime, the second (actual align) pass around 60% of runtime.
     " Numeric-aware logic by itself adds about 50% runtime compared to the basic string-based field width alignment
     " If there are lot of numeric columns this can additionally increase runtime by another 50% or more.
     let show_progress_bar = wordcount()['bytes'] > 200000
     let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
+    if ((policy == 'monocolumn') && (has_key(s:ft_exceptions_map, &ft)))
+        if (a:range_info == 0)
+            echoerr "RainbowAlign requires an address range in markdown and rmd files"
+            return
+        endif
+        let policy = 'simple'
+        let delim = '|'
+        let comment_prefix = ''
+        " no progress bar for markdown and rmd filetypes
+        let show_progress_bar = 0
+    endif
     if policy == 'monocolumn'
         echoerr "RainbowAlign is available only for highlighted CSV files"
         return
@@ -840,13 +855,13 @@ func! rainbow_csv#csv_align()
         echoerr 'RainbowAlign not available for "rfc_csv" filetypes, consider using "csv" instead'
         return
     endif
-    let lastLineNo = line("$")
+    let lastLineNo = last_line
     let progress_bucket_size = (lastLineNo * 2) / s:progress_bar_size " multiply by 2 because we have two passes.
     if !show_progress_bar || progress_bucket_size < 10
         let progress_bucket_size = 0
     endif
     let s:align_progress_bar_position = 0
-    let [column_stats, first_failed_line] = s:calc_column_stats(delim, policy, comment_prefix, progress_bucket_size)
+    let [column_stats, first_failed_line] = s:calc_column_stats(delim, policy, comment_prefix, progress_bucket_size,first_line,last_line)
     if first_failed_line != 0
         echoerr 'Unable to allign: Inconsistent double quotes at line ' . first_failed_line
         return
@@ -858,7 +873,7 @@ func! rainbow_csv#csv_align()
     endif
     let has_edit = 0
     let is_first_line = 1
-    for linenum in range(1, lastLineNo)
+    for linenum in range(first_line, lastLineNo)
         if (progress_bucket_size && linenum % progress_bucket_size == 0)
             let s:align_progress_bar_position = s:align_progress_bar_position + 1
             call s:display_progress_bar(s:align_progress_bar_position)
@@ -893,8 +908,20 @@ func! rainbow_csv#csv_align()
 endfunc
 
 
-func! rainbow_csv#csv_shrink()
+func! rainbow_csv#csv_shrink(range_info) range
+    let first_line = a:firstline
+    let last_line = a:lastline
+    let show_progress_bar = wordcount()['bytes'] > 200000
     let [delim, policy, comment_prefix] = rainbow_csv#get_current_dialect()
+    if ((policy == 'monocolumn') && (has_key(s:ft_exceptions_map, &ft)))
+        if (a:range_info == 0)
+            echoerr "RainbowShrink requires an address range in markdown and rmd files"
+            return
+        endif
+        let policy = 'simple'
+        let delim = '|'
+        let comment_prefix = ''
+    endif
     if policy == 'monocolumn'
         echoerr "RainbowShrink is available only for highlighted CSV files"
         return
@@ -903,15 +930,14 @@ func! rainbow_csv#csv_shrink()
         echoerr 'RainbowShrink not available for "rfc_csv" filetypes, consider using "csv" instead'
         return
     endif
-    let lastLineNo = line("$")
+    let lastLineNo = last_line
     let has_edit = 0
-    let show_progress_bar = wordcount()['bytes'] > 200000
     let progress_bucket_size = lastLineNo / s:progress_bar_size
     if !show_progress_bar || progress_bucket_size < 10
         let progress_bucket_size = 0
     endif
     let s:align_progress_bar_position = 0
-    for linenum in range(1, lastLineNo)
+    for linenum in range(first_line, lastLineNo)
         if (progress_bucket_size && linenum % progress_bucket_size == 0)
             let s:align_progress_bar_position = s:align_progress_bar_position + 1
             call s:display_progress_bar(s:align_progress_bar_position)
