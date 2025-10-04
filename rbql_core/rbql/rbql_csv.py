@@ -1,29 +1,18 @@
-# -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-from __future__ import print_function
-
 import sys
 import os
-import codecs
 import io
+import re
 from errno import EPIPE
 
 from . import rbql_engine
 from . import csv_utils
 
-
-PY3 = sys.version_info[0] == 3
-polymorphic_xrange = range if PY3 else xrange
+# FIXME add-hoc tests in cli + unit tests
 
 default_csv_encoding = 'utf-8'
 ansi_reset_color_code = '\u001b[0m'
 
 debug_mode = False
-
-try:
-    broken_pipe_exception = BrokenPipeError
-except NameError: # Python 2
-    broken_pipe_exception = IOError
 
 
 def is_ascii(s):
@@ -58,31 +47,23 @@ def interpret_named_csv_format(format_name):
 def encode_input_stream(stream, encoding):
     if encoding is None:
         return stream
-    if PY3:
-        # Reference: https://stackoverflow.com/a/16549381/2898283
-        # typical stream (e.g. sys.stdin) in Python 3 is actually a io.TextIOWrapper but with some unknown encoding
-        try:
-            return io.TextIOWrapper(stream.buffer, encoding=encoding)
-        except AttributeError:
-            # BytesIO doesn't have "buffer"
-            return io.TextIOWrapper(stream, encoding=encoding)
-    else:
-        # Reference: https://stackoverflow.com/a/27425797/2898283
-        # Python 2 streams don't have stream.buffer and therefore we can't use io.TextIOWrapper. Instead we use codecs
-        return codecs.getreader(encoding)(stream)
+    # Reference: https://stackoverflow.com/a/16549381/2898283
+    # typical stream (e.g. sys.stdin) in Python 3 is actually a io.TextIOWrapper but with some unknown encoding
+    try:
+        return io.TextIOWrapper(stream.buffer, encoding=encoding)
+    except AttributeError:
+        # BytesIO doesn't have "buffer"
+        return io.TextIOWrapper(stream, encoding=encoding)
 
 
 def encode_output_stream(stream, encoding):
     if encoding is None:
         return stream
-    if PY3:
-        try:
-            return io.TextIOWrapper(stream.buffer, encoding=encoding)
-        except AttributeError:
-            # BytesIO doesn't have "buffer"
-            return io.TextIOWrapper(stream, encoding=encoding)
-    else:
-        return codecs.getwriter(encoding)(stream)
+    try:
+        return io.TextIOWrapper(stream.buffer, encoding=encoding)
+    except AttributeError:
+        # BytesIO doesn't have "buffer"
+        return io.TextIOWrapper(stream, encoding=encoding)
 
 
 def remove_utf8_bom(line, assumed_source_encoding):
@@ -246,8 +227,8 @@ class CSVWriter(rbql_engine.RBQLOutputWriter):
                 self.stream.write(ansi_reset_color_code)
             self.stream.write(self.line_separator)
             return True
-        except broken_pipe_exception as exc:
-            if broken_pipe_exception == IOError:
+        except BrokenPipeError as exc:
+            if BrokenPipeError == IOError: # FIXME perhaps we don't need this? Maybe it was needed for Python 2 only?
                 if exc.errno != EPIPE:
                     raise
             self.broken_pipe = True
@@ -255,17 +236,17 @@ class CSVWriter(rbql_engine.RBQLOutputWriter):
 
 
     def colorize_fields(self, fields):
-        for i in polymorphic_xrange(len(fields)):
+        for i in range(len(fields)):
             fields[i] = self.colors[i % len(self.colors)] + fields[i]
 
 
     def quote_fields(self, fields):
-        for i in polymorphic_xrange(len(fields)):
+        for i in range(len(fields)):
             fields[i] = csv_utils.quote_field(fields[i], self.delim)
 
 
     def quote_fields_rfc(self, fields):
-        for i in polymorphic_xrange(len(fields)):
+        for i in range(len(fields)):
             fields[i] = csv_utils.rfc_quote_field(fields[i], self.delim)
 
 
@@ -275,10 +256,8 @@ class CSVWriter(rbql_engine.RBQLOutputWriter):
 
 
     def normalize_fields(self, fields):
-        for i in polymorphic_xrange(len(fields)):
-            if PY3 and isinstance(fields[i], str):
-                continue
-            elif not PY3 and isinstance(fields[i], basestring):
+        for i in range(len(fields)):
+            if isinstance(fields[i], str):
                 continue
             elif fields[i] is None:
                 fields[i] = ''
@@ -306,8 +285,8 @@ class CSVWriter(rbql_engine.RBQLOutputWriter):
                 self.stream.flush() # This flush still can throw if all flushes before were sucessfull! And the exceptions would be printed anyway, even if it was explicitly catched just couple of lines after.
                 # Basically this fails if output is small and this is the first flush after the pipe was broken e.g. second flush if piped to head -n 1
                 # Here head -n 1 finished after the first flush, and the final explict flush here just killing it
-            except broken_pipe_exception as exc:
-                if broken_pipe_exception == IOError:
+            except BrokenPipeError as exc:
+                if BrokenPipeError == IOError: # FIXME perhaps we don't need this? Maybe it was needed for Python 2 only?
                     if exc.errno != EPIPE:
                         raise
                 # In order to avoid BrokenPipeError from being printed as a warning to stderr, we need to perform this magic below. See:
@@ -329,7 +308,7 @@ class CSVWriter(rbql_engine.RBQLOutputWriter):
 
 
 class CSVRecordIterator(rbql_engine.RBQLInputIterator):
-    def __init__(self, stream, encoding, delim, policy, has_header=False, comment_prefix=None, table_name='input', variable_prefix='a', chunk_size=1024, line_mode=False, strip_whitespaces=False):
+    def __init__(self, stream, encoding, delim, policy, has_header=False, comment_prefix=None, table_name='input', variable_prefix='a', chunk_size=1024, line_mode=False, strip_whitespaces=False, comment_regex=None):
         assert encoding in ['utf-8', 'latin-1', None]
         self.encoding = encoding
         self.stream = encode_input_stream(stream, encoding)
@@ -338,8 +317,8 @@ class CSVRecordIterator(rbql_engine.RBQLInputIterator):
         self.table_name = table_name
         self.variable_prefix = variable_prefix
         self.comment_prefix = comment_prefix if (comment_prefix is not None and len(comment_prefix)) else None
-        # FIXME add unit test for this, test both strip and non-strip with file that contains some extra whitespaces, both Python and JS.
         self.strip_whitespaces = strip_whitespaces
+        self.comment_regex = comment_regex if (comment_regex is not None and len(comment_regex)) else None
 
         self.buffer = ''
         self.detected_line_separator = '\n'
@@ -440,8 +419,12 @@ class CSVRecordIterator(rbql_engine.RBQLInputIterator):
         first_row = self.get_row_simple()
         if first_row is None:
             return None
+        # If the line is a comment - return it right away, even though it is a comment it is still a "full row", so we don't have to search where the logical row ends.
         if self.comment_prefix is not None and first_row.startswith(self.comment_prefix):
             return first_row
+        if self.comment_regex is not None and re.search(self.comment_regex, first_row) is not None:
+            return first_row
+
         if first_row.count('"') % 2 == 0:
             return first_row
         rows_buffer = [first_row]
@@ -458,12 +441,19 @@ class CSVRecordIterator(rbql_engine.RBQLInputIterator):
         if self.first_record_should_be_emitted:
             self.first_record_should_be_emitted = False
             return self.first_record
-        while True:
+
+        # Skip comment lines:
+        found_record = False
+        while not found_record:
             line = self.polymorphic_get_row()
             if line is None:
                 return None
-            if self.comment_prefix is None or not line.startswith(self.comment_prefix):
-                break
+            if self.comment_prefix is not None and line.startswith(self.comment_prefix):
+                continue
+            if self.comment_regex is not None and re.search(self.comment_regex, line) is not None:
+                continue
+            found_record = True
+
         self.NR += 1
         record, warning = csv_utils.smart_split(line, self.delim, self.policy, preserve_quotes_and_whitespaces=False)
         if self.strip_whitespaces:
@@ -513,7 +503,7 @@ class CSVRecordIterator(rbql_engine.RBQLInputIterator):
 
 
 class FileSystemCSVRegistry(rbql_engine.RBQLTableRegistry):
-    def __init__(self, input_file_dir, delim, policy, encoding, has_header, comment_prefix, strip_whitespaces):
+    def __init__(self, input_file_dir, delim, policy, encoding, has_header, comment_prefix, strip_whitespaces, comment_regex):
         self.input_file_dir = input_file_dir
         self.delim = delim
         self.policy = policy
@@ -524,13 +514,14 @@ class FileSystemCSVRegistry(rbql_engine.RBQLTableRegistry):
         self.comment_prefix = comment_prefix
         self.strip_whitespaces = strip_whitespaces
         self.table_path = None
+        self.comment_regex = comment_regex
 
     def get_iterator_by_table_id(self, table_id, single_char_alias):
         self.table_path = find_table_path(self.input_file_dir, table_id)
         if self.table_path is None:
             raise rbql_engine.RbqlIOHandlingError('Unable to find join table "{}"'.format(table_id))
         self.input_stream = open(self.table_path, 'rb')
-        self.record_iterator = CSVRecordIterator(self.input_stream, self.encoding, self.delim, self.policy, self.has_header, comment_prefix=self.comment_prefix, table_name=table_id, variable_prefix=single_char_alias, strip_whitespaces=self.strip_whitespaces)
+        self.record_iterator = CSVRecordIterator(self.input_stream, self.encoding, self.delim, self.policy, self.has_header, comment_prefix=self.comment_prefix, table_name=table_id, variable_prefix=single_char_alias, strip_whitespaces=self.strip_whitespaces, comment_regex=self.comment_regex)
         return self.record_iterator
 
     def finish(self):
@@ -544,7 +535,7 @@ class FileSystemCSVRegistry(rbql_engine.RBQLTableRegistry):
         return result
 
 
-def query_csv(query_text, input_path, input_delim, input_policy, output_path, output_delim, output_policy, csv_encoding, output_warnings, with_headers, comment_prefix=None, user_init_code='', colorize_output=False, strip_whitespaces=False):
+def query_csv(query_text, input_path, input_delim, input_policy, output_path, output_delim, output_policy, csv_encoding, output_warnings, with_headers, comment_prefix=None, user_init_code='', colorize_output=False, strip_whitespaces=False, comment_regex=None):
     output_stream, close_output_on_finish = (None, False)
     input_stream, close_input_on_finish = (None, False)
     join_tables_registry = None
@@ -568,8 +559,8 @@ def query_csv(query_text, input_path, input_delim, input_policy, output_path, ou
             user_init_code = read_user_init_code(default_init_source_path)
 
         input_file_dir = None if not input_path else os.path.dirname(input_path)
-        join_tables_registry = FileSystemCSVRegistry(input_file_dir, input_delim, input_policy, csv_encoding, with_headers, comment_prefix, strip_whitespaces)
-        input_iterator = CSVRecordIterator(input_stream, csv_encoding, input_delim, input_policy, with_headers, comment_prefix=comment_prefix, strip_whitespaces=strip_whitespaces)
+        join_tables_registry = FileSystemCSVRegistry(input_file_dir, input_delim, input_policy, csv_encoding, with_headers, comment_prefix, strip_whitespaces, comment_regex)
+        input_iterator = CSVRecordIterator(input_stream, csv_encoding, input_delim, input_policy, with_headers, comment_prefix=comment_prefix, strip_whitespaces=strip_whitespaces, comment_regex=comment_regex)
         output_writer = CSVWriter(output_stream, close_output_on_finish, csv_encoding, output_delim, output_policy, colorize_output=colorize_output)
         if debug_mode:
             rbql_engine.set_debug_mode()

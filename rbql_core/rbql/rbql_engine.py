@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-from __future__ import print_function
-
 import sys
 import re
 import ast
@@ -44,8 +40,6 @@ ambiguous_error_msg = 'Ambiguous variable name: "{}" is present both in input an
 invalid_keyword_in_aggregate_query_error_msg = '"ORDER BY", "UPDATE" and "DISTINCT" keywords are not allowed in aggregate queries'
 wrong_aggregation_usage_error = 'Usage of RBQL aggregation functions inside Python expressions is not allowed, see the docs'
 numeric_conversion_error = 'Unable to convert value "{}" to int or float. MIN, MAX, SUM, AVG, MEDIAN and VARIANCE aggregate functions convert their string arguments to numeric values'
-
-PY3 = sys.version_info[0] == 3
 
 RBQL_VERSION = __version__
 
@@ -104,10 +98,6 @@ class RBQLContext:
         self.variables_init_code = None
 
 
-def is_str6(val):
-    return (PY3 and isinstance(val, str)) or (not PY3 and isinstance(val, basestring))
-
-
 QueryColumnInfo = namedtuple('QueryColumnInfo', ['table_name', 'column_index', 'column_name', 'is_star', 'alias_name'])
 
 
@@ -162,7 +152,7 @@ def column_info_from_node(root):
         column_name = get_field(root, 'attr')
         if not column_name:
             return None
-        if not is_str6(column_name):
+        if not isinstance(column_name, str):
             return None
         var_root = get_field(root, 'value')
         if not isinstance(var_root, ast.Name):
@@ -181,20 +171,35 @@ def column_info_from_node(root):
         if table_name is None or table_name not in ['a', 'b']:
             return None
         slice_root = get_field(root, 'slice')
-        if slice_root is None or not isinstance(slice_root, ast.Index):
+        if slice_root is None:
             return None
-        slice_val_root = get_field(slice_root, 'value')
         column_index = None
         column_name = None
-        if isinstance(slice_val_root, ast.Str):
-            column_name = get_field(slice_val_root, 's')
-            table_name = None # We don't need table name for named fields
-        elif isinstance(slice_val_root, ast.Num):
-            column_index = get_field(slice_val_root, 'n') - 1
+        if hasattr(ast, 'Index') and isinstance(slice_root, ast.Index):
+            # Important: Since version 3.8 ast.Constant is used instead of ast.Index.
+            # Furthermore ast.Index might be removed from ast in future releases.
+            slice_val_root = get_field(slice_root, 'value')
+            column_index = None
+            column_name = None
+            if isinstance(slice_val_root, ast.Str):
+                column_name = get_field(slice_val_root, 's')
+                table_name = None # We don't need table name for named fields. Updated: But Why???
+            elif isinstance(slice_val_root, ast.Num):
+                column_index = get_field(slice_val_root, 'n') - 1
+            else:
+                return None
+        elif hasattr(ast, 'Constant') and isinstance(slice_root, ast.Constant):
+            # Note: `ast.Constant` replaced `ast.Index` since version 3.8
+            slice_val_root = get_field(slice_root, 'value')
+            if isinstance(slice_val_root, str):
+                column_name = slice_val_root
+                table_name = None # We don't need table name for named fields. Updated: But Why???
+            elif isinstance(slice_val_root, int):
+                column_index = slice_val_root - 1
+            else:
+                return None
         else:
             return None
-        if not PY3 and isinstance(column_name, str):
-            column_name = column_name.decode('utf-8')
         return QueryColumnInfo(table_name=table_name, column_index=column_index, column_name=column_name, is_star=False, alias_name=None)
     column_alias_name = search_for_as_alias_pseudo_function(root)
     if column_alias_name:
@@ -220,12 +225,6 @@ def ast_parse_select_expression_to_column_infos(select_expression):
     else:
         column_infos = [column_info_from_node(root)]
     return column_infos
-
-
-def iteritems6(x):
-    if PY3:
-        return x.items()
-    return x.iteritems()
 
 
 class RBQLRecord:
@@ -295,7 +294,7 @@ class NumHandler:
     def parse(self, val):
         if not self.string_detection_done:
             self.string_detection_done = True
-            if is_str6(val):
+            if isinstance(val, str):
                 self.is_str = True
         if not self.is_str:
             return val
@@ -525,7 +524,7 @@ class UniqCountWriter(object):
         return True
 
     def finish(self):
-        for record, cnt in iteritems6(self.records):
+        for record, cnt in self.records.items():
             mutable_record = list(record)
             mutable_record.insert(0, cnt)
             if not self.subwriter.write(mutable_record):
@@ -899,9 +898,7 @@ def compile_and_run(query_context, user_namespace, unit_test_mode=False):
     def mad_max(*args, **kwargs):
         single_arg = len(args) == 1 and not kwargs
         if single_arg:
-            if PY3 and isinstance(args[0], str):
-                return MAX(args[0])
-            if not PY3 and isinstance(args[0], basestring):
+            if isinstance(args[0], str):
                 return MAX(args[0])
             if isinstance(args[0], int) or isinstance(args[0], float):
                 return MAX(args[0])
@@ -916,9 +913,7 @@ def compile_and_run(query_context, user_namespace, unit_test_mode=False):
     def mad_min(*args, **kwargs):
         single_arg = len(args) == 1 and not kwargs
         if single_arg:
-            if PY3 and isinstance(args[0], str):
-                return MIN(args[0])
-            if not PY3 and isinstance(args[0], basestring):
+            if isinstance(args[0], str):
                 return MIN(args[0])
             if isinstance(args[0], int) or isinstance(args[0], float):
                 return MIN(args[0])
@@ -1588,7 +1583,13 @@ def make_inconsistent_num_fields_warning(table_name, inconsistent_records_info):
     return warn_msg
 
 
-def query(query_text, input_iterator, output_writer, output_warnings, join_tables_registry=None, user_init_code='', user_namespace=None):
+def split_query_to_stages(query_text):
+    # RBQL will allow to use both nix-style pipe '|' and bigquery '|>' syntax because RBQL pipes create actual execution boundaries and "physical" pipes, while in bigquery pipe syntax is just syntatic sugar, query is transformed to a normal form anyway.
+    pattern = r'\|[>]?[ ]*(?=(?:select|update)[ ])'
+    return re.split(pattern, query_text, flags=re.IGNORECASE)
+
+
+def staged_query(query_text, input_iterator, output_writer, output_warnings, join_tables_registry, user_init_code, user_namespace):
     query_context = RBQLContext(input_iterator, output_writer, user_init_code)
     shallow_parse_input_query(query_text, input_iterator, join_tables_registry, query_context)
     compile_and_run(query_context, user_namespace)
@@ -1597,6 +1598,17 @@ def query(query_text, input_iterator, output_writer, output_warnings, join_table
     if query_context.join_map_impl is not None:
         output_warnings.extend(query_context.join_map_impl.get_warnings())
     output_warnings.extend(output_writer.get_warnings())
+
+
+def query(query_text, input_iterator, output_writer, output_warnings, join_tables_registry=None, user_init_code='', user_namespace=None):
+    query_stages = split_query_to_stages(query_text)
+    previous_pipe = None
+    for i, query_stage_text in enumerate(query_stages):
+        output_pipe = TablePipe() if i + 1 < len(query_stages) else None
+        stage_iterator = input_iterator if previous_pipe is None else previous_pipe.get_iterator()
+        stage_writer = output_writer if output_pipe is None else output_pipe.get_writer()
+        staged_query(query_stage_text, stage_iterator, stage_writer, output_warnings, join_tables_registry, user_init_code, user_namespace)
+        previous_pipe = output_pipe
 
 
 class RBQLInputIterator:
@@ -1690,13 +1702,38 @@ class TableWriter(RBQLOutputWriter):
     def __init__(self, external_table):
         self.table = external_table
         self.header = None
+        self.finished = False
 
     def write(self, fields):
+        # We don't throw exception here if `self.finished` because it might slow things down.
         self.table.append(fields)
         return True
 
     def set_header(self, header):
         self.header = header
+
+    def finish(self):
+        self.finished = True
+
+
+class TablePipe:
+    # Each concrete class with Pipe interface like this one should know how to pass data and header from the reader to the iterator, so they can share some internal info
+    def __init__(self):
+        self.table = []
+        self.writer = TableWriter(self.table)
+        self.iterator = None
+
+    def get_writer(self):
+        return self.writer
+
+    def get_iterator(self):
+        if not self.writer.finished:
+            # We don't have to check it in other pipes if implemented but this one is not thread safe.
+            raise RbqlIOHandlingError("Trying to read from non-thread-safe table pipe while not finishing writing yet")
+        if self.iterator is None:
+            self.iterator = TableIterator(self.table, self.writer.header)
+        return self.iterator
+
 
 
 ListTableInfo = namedtuple('ListTableInfo', ['table_id', 'table', 'column_names'])

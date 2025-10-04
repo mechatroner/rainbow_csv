@@ -1,9 +1,4 @@
-# -*- coding: utf-8 -*-
-
 # This module allows to query sqlite databases using RBQL
-
-from __future__ import unicode_literals
-from __future__ import print_function
 
 
 # TODO consider to support table names in "FROM" section of the query, making table_name param of SqliteRecordIterator optional

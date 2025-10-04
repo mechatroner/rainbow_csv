@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-from __future__ import unicode_literals
-from __future__ import print_function
 
 import sys
 import os
@@ -21,12 +19,7 @@ from . import _version
 # TODO add an option to align columns for content preview. This would be especially useful for Windows which doesn't support terminal colors
 
 
-PY3 = sys.version_info[0] == 3
-
-
 history_path = os.path.join(os.path.expanduser("~"), ".rbql_py_query_history")
-
-polymorphic_input = input if PY3 else raw_input
 
 
 def eprint(*args, **kwargs):
@@ -35,9 +28,6 @@ def eprint(*args, **kwargs):
 
 policy_names = ['quoted', 'simple', 'whitespace', 'quoted_rfc', 'monocolumn']
 out_format_names = ['csv', 'tsv', 'input']
-
-
-polymorphic_xrange = range if PY3 else xrange
 
 
 def get_default_policy(delim):
@@ -87,7 +77,7 @@ def run_with_python_csv(args, is_interactive):
     warnings = []
     error_type, error_msg = None, None
     try:
-        rbql_csv.query_csv(query, input_path, delim, policy, output_path, out_delim, out_policy, csv_encoding, warnings, with_headers, args.comment_prefix, user_init_code, args.color, strip_whitespaces=args.strip_spaces)
+        rbql_csv.query_csv(query, input_path, delim, policy, output_path, out_delim, out_policy, csv_encoding, warnings, with_headers, args.comment_prefix, user_init_code, args.color, strip_whitespaces=args.strip_spaces, comment_regex=args.comment_regex)
     except Exception as e:
         if args.debug_mode:
             raise
@@ -149,12 +139,12 @@ def is_delimited_table(sampled_lines, delim, policy):
     return True
 
 
-def sample_lines(src_path, encoding, delim, policy, comment_prefix=None):
+def sample_lines(src_path, encoding, delim, policy, comment_prefix, comment_regex):
     # TODO this should be a dependency-free function, remove sample line functionality from CSVRecordIterator
     result = []
     with open(src_path, 'rb') as source:
-        line_iterator = rbql_csv.CSVRecordIterator(source, encoding, delim=delim, policy=policy, line_mode=True, comment_prefix=comment_prefix)
-        for _i in polymorphic_xrange(10):
+        line_iterator = rbql_csv.CSVRecordIterator(source, encoding, delim=delim, policy=policy, line_mode=True, comment_prefix=comment_prefix, comment_regex=comment_regex)
+        for _i in range(10):
             line = line_iterator.polymorphic_get_row()
             if line is None:
                 break
@@ -162,8 +152,8 @@ def sample_lines(src_path, encoding, delim, policy, comment_prefix=None):
         return result
 
 
-def autodetect_delim_policy(input_path, encoding, comment_prefix=None):
-    sampled_lines = sample_lines(input_path, encoding, None, None, comment_prefix)
+def autodetect_delim_policy(input_path, encoding, comment_prefix, comment_regex):
+    sampled_lines = sample_lines(input_path, encoding, None, None, comment_prefix, comment_regex)
     autodetection_dialects = [('\t', 'simple'), (',', 'quoted'), (';', 'quoted'), ('|', 'simple')]
     for delim, policy in autodetection_dialects:
         if is_delimited_table(sampled_lines, delim, policy):
@@ -175,9 +165,9 @@ def autodetect_delim_policy(input_path, encoding, comment_prefix=None):
     return (None, None)
 
 
-def sample_records(input_path, delim, policy, encoding, comment_prefix, strip_whitespaces):
+def sample_records(input_path, delim, policy, encoding, comment_prefix, strip_whitespaces, comment_regex):
     with open(input_path, 'rb') as source:
-        record_iterator = rbql_csv.CSVRecordIterator(source, encoding, delim=delim, policy=policy, comment_prefix=comment_prefix, strip_whitespaces=strip_whitespaces)
+        record_iterator = rbql_csv.CSVRecordIterator(source, encoding, delim=delim, policy=policy, comment_prefix=comment_prefix, strip_whitespaces=strip_whitespaces, comment_regex=comment_regex)
         sampled_records = record_iterator.get_all_records(num_rows=10);
         warnings = record_iterator.get_warnings()
         return (sampled_records, warnings)
@@ -201,10 +191,7 @@ def print_colorized(records, delim, encoding, show_column_names, with_headers):
                 colored_field = '{}a{}:{}'.format(color_code, i + 1, field)
             out_fields.append(colored_field)
         out_line = delim.join(out_fields) + reset_color_code
-        if PY3:
-            sys.stdout.buffer.write(out_line.encode(encoding))
-        else:
-            sys.stdout.write(out_line.encode(encoding))
+        sys.stdout.buffer.write(out_line.encode(encoding))
         sys.stdout.write('\n')
         sys.stdout.flush()
 
@@ -227,7 +214,7 @@ def run_interactive_loop(mode, args):
         pass
     while True:
         try:
-            query = polymorphic_input('Input SQL-like RBQL query and press Enter:\n> ')
+            query = input('Input SQL-like RBQL query and press Enter:\n> ')
             query = query.strip()
         except EOFError:
             print()
@@ -247,7 +234,7 @@ def run_interactive_loop(mode, args):
             print('\nOutput table preview:')
             print('====================================')
             # Never strip whitespaces in the output preview.
-            records, _warnings = sample_records(args.output, args.output_delim, args.output_policy, args.encoding, comment_prefix=None, strip_whitespaces=False)
+            records, _warnings = sample_records(args.output, args.output_delim, args.output_policy, args.encoding, comment_prefix=None, strip_whitespaces=False, comment_regex=None)
             print_colorized(records, args.output_delim, args.encoding, show_column_names=False, with_headers=False)
             print('====================================')
             print('Success! Result table was saved to: ' + args.output)
@@ -278,10 +265,10 @@ def select_table_name_by_user_choice(db_connection):
     else:
         print('Showing database tables:')
     print(', '.join(table_names[:max_to_show]))
-    table_name = polymorphic_input('No input table was provided as a CLI argument, please type in the table name to use:\n> ')
+    table_name = input('No input table was provided as a CLI argument, please type in the table name to use:\n> ')
     table_name = table_name.strip()
     while table_name not in table_names:
-        table_name = polymorphic_input('"{}" is not a valid table name. Please enter a valid table name:\n> '.format(table_name))
+        table_name = input('"{}" is not a valid table name. Please enter a valid table name:\n> '.format(table_name))
         table_name = table_name.strip()
     return table_name
 
@@ -327,13 +314,13 @@ def start_preview_mode_csv(args):
         delim = rbql_csv.normalize_delim(args.delim)
         policy = args.policy if args.policy is not None else get_default_policy(delim)
     else:
-        delim, policy = autodetect_delim_policy(input_path, args.encoding, args.comment_prefix)
+        delim, policy = autodetect_delim_policy(input_path, args.encoding, args.comment_prefix, args.comment_regex)
         if delim is None:
             show_error('generic', 'Unable to autodetect table delimiter. Provide column separator explicitly with "--delim" option', is_interactive=True)
             return
         args.delim = delim
         args.policy = policy
-    records, warnings = sample_records(input_path, delim, policy, args.encoding, args.comment_prefix, args.strip_spaces)
+    records, warnings = sample_records(input_path, delim, policy, args.encoding, args.comment_prefix, args.strip_spaces, args.comment_regex)
     print('Input table preview:')
     print('====================================')
     print_colorized(records, delim, args.encoding, show_column_names=True, with_headers=args.with_headers)
@@ -383,7 +370,8 @@ def csv_main():
     parser.add_argument('--delim', help='delimiter character or multicharacter string, e.g. "," or "###". Can be autodetected in interactive mode')
     parser.add_argument('--policy', help='CSV split policy, see the explanation below. Can be autodetected in interactive mode', choices=policy_names)
     parser.add_argument('--with-headers', action='store_true', help='indicates that input (and join) table has header')
-    parser.add_argument('--comment-prefix', metavar='PREFIX', help='ignore lines in input and join tables that start with the comment PREFIX, e.g. "#" or ">>"')
+    parser.add_argument('--comment-prefix', metavar='PREFIX', help='ignore lines in input and join tables that start with the comment PREFIX, e.g. "#"')
+    parser.add_argument('--comment-regex', metavar='REGEX', help='ignore lines in input and join tables that contain the comment REGEX')
     parser.add_argument('--query', help='query string in rbql. Run in interactive mode if empty')
     parser.add_argument('--out-format', help='output format', default='input', choices=out_format_names)
     parser.add_argument('--encoding', help='manually set csv encoding', default=rbql_csv.default_csv_encoding, choices=['latin-1', 'utf-8'])
@@ -413,12 +401,6 @@ def csv_main():
     if args.delim is None and args.policy is not None:
         show_error('generic', 'Using "--policy" without "--delim" is not allowed', is_interactive=False)
         sys.exit(1)
-
-    if args.encoding != 'latin-1' and not PY3:
-        if args.delim is not None:
-            args.delim = args.delim.decode(args.encoding)
-        if args.query is not None:
-            args.query = args.query.decode(args.encoding)
 
     is_interactive_mode = args.query is None
     if is_interactive_mode:

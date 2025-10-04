@@ -1,3 +1,5 @@
+![RBQL logo](rbql_logo.png)
+
 # RBQL: Rainbow Query Language
 
 RBQL is an eval-based SQL-like query engine for (not only) CSV file processing. It provides SQL-like language that supports SELECT queries with Python or JavaScript expressions.  
@@ -17,7 +19,7 @@ Matrix of data formats that RBQL supports out of the box. R=Read, W=Write
 |Pandas dataframe       | **RW**   |         |
 |Sqlite databases       | **R**    |         |
 
-If you use RBQL as a library you can write implementation for a couple of classes to support additional formats.  
+If you use RBQL as a library it is possible to support additional formats with some customizations.  
 
 ### Main Features
 
@@ -47,6 +49,7 @@ If you use RBQL as a library you can write implementation for a couple of classe
 * GROUP BY
 * TOP _N_
 * LIMIT _N_
+* AS
 
 All keywords have the same meaning as in SQL queries. You can check them [online](https://www.w3schools.com/sql/default.asp)  
 
@@ -81,12 +84,12 @@ _UPDATE_ query produces a new table where original values are replaced according
 ### Aggregate functions and queries
 
 RBQL supports the following aggregate functions, which can also be used with _GROUP BY_ keyword:  
-_COUNT_, _ARRAY_AGG_, _MIN_, _MAX_, _SUM_, _AVG_, _VARIANCE_, _MEDIAN_  
+_COUNT_, _ARRAY_AGG_, _MIN_, _MAX_, _ANY_VALUE_, _SUM_, _AVG_, _VARIANCE_, _MEDIAN_  
 
 Limitation: aggregate functions inside Python (or JS) expressions are not supported. Although you can use expressions inside aggregate functions.  
 E.g. `MAX(float(a1) / 1000)` - valid; `MAX(a1) / 1000` - invalid.  
 There is a workaround for the limitation above for _ARRAY_AGG_ function which supports an optional parameter - a callback function that can do something with the aggregated array. Example:  
-`select a2, ARRAY_AGG(a1, lambda v: sorted(v)[:5]) group by a2` - Python; `select a2, ARRAY_AGG(a1, v => v.sort().slice(0, 5)) group by a2` - JS
+`SELECT a2, ARRAY_AGG(a1, lambda v: sorted(v)[:5]) GROUP BY a2` - Python; `SELECT a2, ARRAY_AGG(a1, v => v.sort().slice(0, 5)) GROUP BY a2` - JS
 
 
 ### JOIN statements
@@ -118,6 +121,13 @@ But it is also possible to override this selection directly in the query by addi
 Example: `select top 5 NR, * with (header)`
 
 
+### Pipe syntax for query chaining
+You can chain consecutive queries via pipe `|` syntax. Example:
+```
+SELECT a2 AS region, count(*) AS cnt GROUP BY a2 | SELECT * ORDER BY a.cnt DESC
+```
+
+
 ### User Defined Functions (UDF)
 
 RBQL supports User Defined Functions  
@@ -130,26 +140,28 @@ You can define custom functions and/or import libraries in two special files:
 
 #### With Python expressions
 
-* `select top 100 a1, int(a2) * 10, len(a4) where a1 == "Buy" order by int(a2) desc`
-* `select * order by random.random()` - random sort
-* `select len(a.vehicle_price) / 10, a2 where int(a.vehicle_price) < 500 and a['Vehicle type'] in ["car", "plane", "boat"] limit 20` - referencing columns by names from header and using Python's "in" to emulate SQL's "in"
-* `update set a3 = 'NPC' where a3.find('Non-playable character') != -1`
-* `select NR, *` - enumerate records, NR is 1-based
-* `select * where re.match(".*ab.*", a1) is not None` - select entries where first column has "ab" pattern
-* `select a1, b1, b2 inner join ./countries.txt on a2 == b1 order by a1, a3` - example of join query
-* `select MAX(a1), MIN(a1) where a.Name != 'John' group by a2, a3` - example of aggregate query
-* `select *a1.split(':')` - Using Python3 unpack operator to split one column into many. Do not try this with other SQL engines!
+* `SELECT TOP 100 a1, int(a2) * 10, len(a4) WHERE a1 == "Buy" ORDER BY int(a2) DESC`
+* `SELECT a.id, a.weight / 1000 AS weight_kg`
+* `SELECT * ORDER BY random.random()` - random sort
+* `SELECT len(a.vehicle_price) / 10, a2 WHERE int(a.vehicle_price) < 500 and a['Vehicle type'] in ["car", "plane", "boat"] limit 20` - referencing columns by names from header and using Python's "in" to emulate SQL's "in"
+* `UPDATE SET a3 = 'NPC' WHERE a3.find('Non-playable character') != -1`
+* `SELECT NR, *` - enumerate records, NR is 1-based
+* `SELECT * WHERE re.match(".*ab.*", a1) is not None` - select entries where first column has "ab" pattern
+* `SELECT a1, b1, b2 INNER JOIN ./countries.txt ON a2 == b1 ORDER BY a1, a3` - example of join query
+* `SELECT MAX(a1), MIN(a1) WHERE a.Name != 'John' GROUP BY a2, a3` - example of aggregate query
+* `SELECT *a1.split(':')` - Using Python3 unpack operator to split one column into many. Do not try this with other SQL engines!
 
 #### With JavaScript expressions
 
-* `select top 100 a1, a2 * 10, a4.length where a1 == "Buy" order by parseInt(a2) desc`
-* `select * order by Math.random()` - random sort
-* `select top 20 a.vehicle_price.length / 10, a2 where parseInt(a.vehicle_price) < 500 && ["car", "plane", "boat"].indexOf(a['Vehicle type']) > -1 limit 20` - referencing columns by names from header
-* `update set a3 = 'NPC' where a3.indexOf('Non-playable character') != -1`
-* `select NR, *` - enumerate records, NR is 1-based
-* `select a1, b1, b2 inner join ./countries.txt on a2 == b1 order by a1, a3` - example of join query
-* `select MAX(a1), MIN(a1) where a.Name != 'John' group by a2, a3` - example of aggregate query
-* `select ...a1.split(':')` - Using JS "destructuring assignment" syntax to split one column into many. Do not try this with other SQL engines!
+* `SELECT TOP 100 a1, a2 * 10, a4.length WHERE a1 == "Buy" ORDER BY parseInt(a2) DESC`
+* `SELECT a.id, a.weight / 1000 AS weight_kg`
+* `SELECT * ORDER BY Math.random()` - random sort
+* `SELECT TOP 20 a.vehicle_price.length / 10, a2 WHERE parseInt(a.vehicle_price) < 500 && ["car", "plane", "boat"].indexOf(a['Vehicle type']) > -1 limit 20` - referencing columns by names from header
+* `UPDATE SET a3 = 'NPC' WHERE a3.indexOf('Non-playable character') != -1`
+* `SELECT NR, *` - enumerate records, NR is 1-based
+* `SELECT a1, b1, b2 INNER JOIN ./countries.txt ON a2 == b1 ORDER BY a1, a3` - example of join query
+* `SELECT MAX(a1), MIN(a1) WHERE a.Name != 'John' GROUP BY a2, a3` - example of aggregate query
+* `SELECT ...a1.split(':')` - Using JS "destructuring assignment" syntax to split one column into many. Do not try this with other SQL engines!
 
 
 ## RBQL design principles and architecture
@@ -179,7 +191,7 @@ The diagram below gives an overview of the main RBQL components and data flow:
 * Supports EXCEPT statement
 * Provides a fully-functional client-side browser demo application
 * Almost nonexistent entry barrier both for SQL users and JS/Python users
-* Integration with popular text editors (VSCode, Vim, Sublime Text, Atom)
+* Integration with popular text editors (VSCode, Vim, Sublime Text)
 * Small, maintainable, dependency-free, eco-friendly and hackable code base: RBQL engine fits into a single file with less than 2000 LOC
 
 ### Disadvantages of RBQL compared to traditional SQL engines
@@ -192,7 +204,7 @@ The diagram below gives an overview of the main RBQL components and data flow:
 ### References
 
 * [RBQL: Official Site](https://rbql.org/)
-* RBQL is integrated with Rainbow CSV extensions in [Vim](https://github.com/mechatroner/rainbow_csv), [VSCode](https://marketplace.visualstudio.com/items?itemName=mechatroner.rainbow-csv), [Sublime Text](https://packagecontrol.io/packages/rainbow_csv) and [Atom](https://atom.io/packages/rainbow-csv) editors.
+* RBQL is integrated with Rainbow CSV extensions in [Vim](https://github.com/mechatroner/rainbow_csv), [VSCode](https://marketplace.visualstudio.com/items?itemName=mechatroner.rainbow-csv), [Sublime Text](https://packagecontrol.io/packages/rainbow_csv) editors.
 * [Demo Google Colab notebook](https://colab.research.google.com/drive/1_cFPtnQUxILP0RE2_DBlqIfXaEzT-oZ6?usp=sharing)
 * [RBQL in npm](https://www.npmjs.com/package/rbql): `$ npm install -g rbql`
 * [RBQL in PyPI](https://pypi.org/project/rbql/): `$ pip install rbql` - the module also provides `%rbql` magic command for IPython/Jupyter.
