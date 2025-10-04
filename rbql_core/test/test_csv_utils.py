@@ -1,7 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-from __future__ import print_function
 
 import sys
 import os
@@ -19,15 +16,14 @@ import json
 import shutil
 import copy
 
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# Use insert instead of append to make sure that we are using local rbql here.
+sys.path.insert(0, os.path.join(os.path.dirname(script_dir), 'rbql-py'))
+
 import rbql
 from rbql import rbql_csv
 from rbql import csv_utils
 from rbql import rbql_engine
-
-
-#This module must be both python2 and python3 compatible
-
-PY3 = sys.version_info[0] == 3
 
 
 ########################################################################################################
@@ -38,13 +34,10 @@ PY3 = sys.version_info[0] == 3
 line_separators = ['\n', '\r\n', '\r']
 
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-
 vinf = rbql_engine.VariableInfo
 
 
-python_version = float('{}.{}'.format(sys.version_info[0], sys.version_info[1]))
+python_minor_version = int(sys.version_info[1])
 
 
 def normalize_warnings(warnings):
@@ -72,15 +65,6 @@ def calc_file_md5(fname):
         for chunk in iter(lambda: f.read(4096), b""):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
-
-
-polymorphic_unichr = chr if PY3 else unichr
-
-
-def xrange6(x):
-    if PY3:
-        return range(x)
-    return xrange(x)
 
 
 def natural_random(low, high):
@@ -226,7 +210,7 @@ def make_random_decoded_binary_csv_entry(min_len, max_len, restricted_chars):
     restricted_chars = [ord(c) for c in restricted_chars]
     char_codes = [i for i in char_codes if i not in restricted_chars]
     data_bytes = list()
-    for i in xrange6(strlen):
+    for i in range(strlen):
         data_bytes.append(random.choice(char_codes))
     binary_data = bytes(bytearray(data_bytes))
     decoded_binary = binary_data.decode('latin-1')
@@ -240,9 +224,9 @@ def generate_random_decoded_binary_table(max_num_rows, max_num_cols, restricted_
     good_keys = ['Hello', 'Avada Kedavra ', '>> ??????', '128', '#3q295 fa#(@*$*)', ' abc defg ', 'NR', 'a1', 'a2']
     result = list()
     good_column = random.randint(0, num_cols - 1)
-    for r in xrange6(num_rows):
+    for r in range(num_rows):
         result.append(list())
-        for c in xrange6(num_cols):
+        for c in range(num_cols):
             if c == good_column:
                 result[-1].append(random.choice(good_keys))
             else:
@@ -258,7 +242,7 @@ def make_random_unicode_entry(min_len, max_len, restricted_chars):
     while len(result) < strlen:
         v = random.randrange(0xD7FF)
         if v not in restricted_codes:
-            result.append(polymorphic_unichr(v))
+            result.append(chr(v))
     return ''.join(result)
 
 
@@ -268,9 +252,9 @@ def generate_random_unicode_table(max_num_rows, max_num_cols, restricted_chars):
     good_keys = ['Привет!', 'Бабушка', ' ??????', '128', '3q295 fa#(@*$*)', ' abc defg ', 'NR', 'a1', 'a2']
     result = list()
     good_column = random.randint(0, num_cols - 1)
-    for r in xrange6(num_rows):
+    for r in range(num_rows):
         result.append(list())
-        for c in xrange6(num_cols):
+        for c in range(num_cols):
             if c == good_column:
                 result[-1].append(random.choice(good_keys))
             else:
@@ -293,7 +277,7 @@ def make_random_csv_fields_naive(num_fields, max_field_len):
 
 def make_random_csv_records_naive():
     result = list()
-    for num_test in xrange6(1000):
+    for num_test in range(1000):
         num_fields = random.randint(1, 11)
         max_field_len = 25
         fields = make_random_csv_fields_naive(num_fields, max_field_len)
@@ -308,7 +292,7 @@ def make_random_csv_records_naive():
 
 def normalize_newlines_in_fields(table):
     for row in table:
-        for c in xrange6(len(row)):
+        for c in range(len(row)):
             row[c] = row[c].replace('\r\n', '\n')
             row[c] = row[c].replace('\r', '\n')
 
@@ -461,11 +445,11 @@ class TestLineSplit(unittest.TestCase):
 
     def test_split_chunk_sizes(self):
         source_tokens = ['', 'defghIJKLMN', 'a', 'bc'] + ['\n', '\r\n', '\r']
-        for test_case in xrange6(1000):
+        for test_case in range(1000):
             num_tokens = random.randint(0, 12)
             chunk_size = random.randint(1, 5) if random.randint(0, 1) else random.randint(1, 100)
             src = ''
-            for tnum in xrange6(num_tokens):
+            for tnum in range(num_tokens):
                 token = random.choice(source_tokens)
                 src += token
             stream, encoding = string_to_randomly_encoded_stream(src)
@@ -475,10 +459,9 @@ class TestLineSplit(unittest.TestCase):
             expected_res = src.splitlines()
             self.assertEqual(expected_res, test_res)
 
-
 class TestRecordIterator(unittest.TestCase):
     def test_iterator(self):
-        for _test_num in xrange6(100):
+        for _test_num in range(100):
             table = generate_random_decoded_binary_table(10, 10, ['\r', '\n'])
             delims = ['\t', ',', ';', '|']
             delim = random.choice(delims)
@@ -497,7 +480,7 @@ class TestRecordIterator(unittest.TestCase):
 
 
     def test_iterator_unicode(self):
-        for _test_num in xrange6(100):
+        for _test_num in range(100):
             table = generate_random_unicode_table(10, 10, ['\r', '\n'])
             delims = ['\t', ',', ';', '|', 'Д', 'Ф', '\u2063']
             delim = random.choice(delims)
@@ -517,7 +500,7 @@ class TestRecordIterator(unittest.TestCase):
 
 
     def test_iterator_rfc(self):
-        for _test_num in xrange6(100):
+        for _test_num in range(100):
             table = generate_random_decoded_binary_table(10, 10, None)
             delims = ['\t', ',', ';', '|']
             delim = random.choice(delims)
@@ -536,7 +519,7 @@ class TestRecordIterator(unittest.TestCase):
 
 
     def test_iterator_rfc_comments(self):
-        for _test_num in xrange6(200):
+        for _test_num in range(200):
             table = generate_random_decoded_binary_table(10, 10, None)
             comment_prefix = random.choice(['#', '>>'])
             if table_has_records_with_comment_prefix(table, comment_prefix):
@@ -580,6 +563,41 @@ class TestRecordIterator(unittest.TestCase):
         self.assertEqual(table, parsed_table)
 
 
+    def test_strip_whitespaces_true(self):
+        data_lines = []
+        data_lines.append('aa,bb,cc')
+        data_lines.append('  aa ,  bb  , cc  ')
+        data_lines.append('\ta  aa ,  bb \t , cc  c')
+        csv_data = '\n'.join(data_lines)
+        stream, encoding = string_to_randomly_encoded_stream(csv_data)
+        table = [['aa', 'bb', 'cc'], ['aa', 'bb', 'cc'], ['a  aa', 'bb', 'cc  c']]
+        delim = ','
+        policy = 'simple'
+        record_iterator = rbql_csv.CSVRecordIterator(stream, encoding, delim=delim, policy=policy, strip_whitespaces=True)
+        parsed_table = record_iterator.get_all_records()
+        stream.close()
+        self.assertEqual(table, parsed_table)
+        parsed_table = write_and_parse_back(table, encoding, delim, policy)
+        self.assertEqual(table, parsed_table)
+
+
+    def test_strip_whitespaces_false(self):
+        data_lines = []
+        data_lines.append('aa,bb,cc')
+        data_lines.append('  aa ,  bb  , cc  ')
+        data_lines.append('\ta  aa ,  bb \t , cc  c')
+        csv_data = '\n'.join(data_lines)
+        stream, encoding = string_to_randomly_encoded_stream(csv_data)
+        table = [['aa', 'bb', 'cc'], ['  aa ', '  bb  ', ' cc  '], ['\ta  aa ', '  bb \t ', ' cc  c']]
+        delim = ','
+        policy = 'simple'
+        record_iterator = rbql_csv.CSVRecordIterator(stream, encoding, delim=delim, policy=policy, strip_whitespaces=False)
+        parsed_table = record_iterator.get_all_records()
+        stream.close()
+        self.assertEqual(table, parsed_table)
+        parsed_table = write_and_parse_back(table, encoding, delim, policy)
+        self.assertEqual(table, parsed_table)
+
     def test_multicharacter_separator_parsing(self):
         data_lines = []
         data_lines.append('aaa:=)bbb:=)ccc')
@@ -622,11 +640,11 @@ class TestRecordIterator(unittest.TestCase):
 
 
     def test_monocolumn_separated_parsing(self):
-        for i in xrange6(10):
+        for i in range(10):
             self.maxDiff = None
             table = list()
             num_rows = random.randint(1, 30)
-            for irow in xrange6(num_rows):
+            for irow in range(num_rows):
                 min_len = 0 if irow + 1 < num_rows else 1
                 table.append([make_random_decoded_binary_csv_entry(min_len, 20, restricted_chars=['\r', '\n'])])
             csv_data = table_to_csv_string_random(table, None, 'monocolumn')
@@ -849,12 +867,12 @@ class TestRBQLSimple(unittest.TestCase):
 
 
 class TestRBQLWithCSV(unittest.TestCase):
-
+    # TODO add test with whitespace strip in join table.
     def process_test_case(self, tmp_tests_dir, test_case):
         test_name = test_case['test_name']
-        minimal_python_version = float(test_case.get('minimal_python_version', 2.7))
-        if python_version < minimal_python_version:
-            print('Skipping {}: python version must be at least {}. Interpreter version is {}'.format(test_name, minimal_python_version, python_version))
+        minimal_minor_python_version = int(test_case.get('minimal_python_version', '3.0').split('.')[1])
+        if python_minor_version < minimal_minor_python_version:
+            print('Skipping {}: python version must be at least {}. Interpreter version is {}'.format(test_name, minimal_minor_python_version, python_minor_version))
             return
         query = test_case.get('query_python', None)
         if query is None:
@@ -862,6 +880,7 @@ class TestRBQLWithCSV(unittest.TestCase):
         debug_mode = test_case.get('debug_mode', False)
         randomly_replace_var_names = test_case.get('randomly_replace_var_names', True)
         with_headers = test_case.get('with_headers', False)
+        strip_whitespaces = test_case.get('strip_whitespaces', False)
         input_table_path = test_case['input_table_path']
         query = query.replace('###UT_TESTS_DIR###', script_dir)
         if randomly_replace_var_names:
@@ -875,13 +894,17 @@ class TestRBQLWithCSV(unittest.TestCase):
             actual_output_table_path = os.path.join(tmp_tests_dir, output_file_name) 
         else:
             actual_output_table_path = os.path.join(tmp_tests_dir, 'expected_empty_file') 
+        absolute_output_table_path = test_case.get('absolute_output_table_path', None)
+        if absolute_output_table_path is not None:
+            actual_output_table_path = absolute_output_table_path
 
-        expected_error = test_case.get('expected_error', None)
+        expected_error = test_case.get('expected_error', None) or test_case.get('expected_error_py', None)
         expected_warnings = test_case.get('expected_warnings', [])
         delim = test_case['csv_separator']
         policy = test_case['csv_policy']
         encoding = test_case['csv_encoding']
         comment_prefix = test_case.get('comment_prefix', None)
+        comment_regex = test_case.get('comment_regex', None)
         output_format = test_case.get('output_format', 'input')
 
         out_delim, out_policy = (delim, policy) if output_format == 'input' else rbql_csv.interpret_named_csv_format(output_format)
@@ -890,7 +913,7 @@ class TestRBQLWithCSV(unittest.TestCase):
         warnings = []
         error_type, error_msg = None, None
         try:
-            rbql_csv.query_csv(query, input_table_path, delim, policy, actual_output_table_path, out_delim, out_policy, encoding, warnings, with_headers, comment_prefix)
+            rbql_csv.query_csv(query, input_table_path, delim, policy, actual_output_table_path, out_delim, out_policy, encoding, warnings, with_headers, comment_prefix, strip_whitespaces=strip_whitespaces, comment_regex=comment_regex)
         except Exception as e:
             if debug_mode:
                 raise
@@ -957,7 +980,7 @@ def main():
         dst_path = args.create_big_csv_table
         num_rows = 300 * 1000
         with open(dst_path, 'w') as dst:
-            for nr in xrange6(num_rows):
+            for nr in range(num_rows):
                 price = str(random.randint(10, 20))
                 item = random.choice(['parsley', 'sage', 'rosemary', 'thyme'])
                 csv_line = random_smart_join([price, item], ',', 'quoted')
