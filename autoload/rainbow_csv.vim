@@ -364,18 +364,6 @@ func! s:get_meta_language()
 endfunc
 
 
-func! s:has_python_27()
-    if !has("python")
-        return 0
-    endif
-    py import sys
-    if pyeval('sys.version_info[1]') < 7
-        return 0
-    endif
-    return 1
-endfunc
-
-
 func! s:read_virtual_header(delim, policy)
     " TODO rename and refactor into try_set_virtual_header() - without parameters, get delim and policy from the current filetype
     let table_path = resolve(expand("%:p"))
@@ -405,15 +393,9 @@ endfunction
 
 
 func! rainbow_csv#find_python_interpreter()
-    " Checking `python3` first, because `python` could be theorethically linked to python 2.6
     let py3_version = tolower(system('python3 --version'))
     if (v:shell_error == 0 && match(py3_version, 'python 3\.') == 0)
         let s:system_python_interpreter = 'python3'
-        return s:system_python_interpreter
-    endif
-    let py_version = tolower(system('python --version'))
-    if (v:shell_error == 0 && (match(py_version, 'python 2\.7') == 0 || match(py_version, 'python 3\.') == 0))
-        let s:system_python_interpreter = 'python'
         return s:system_python_interpreter
     endif
     let s:system_python_interpreter = ''
@@ -473,11 +455,6 @@ function! s:EnsurePythonInitialization()
         py3 import vim
         exe 'python3 sys.path.insert(0, "' . py_home_dir . '")'
         py3 import vim_rbql
-    elseif s:has_python_27() && !s:use_system_python() && !s:test_coverage()
-        py import sys
-        py import vim
-        exe 'python sys.path.insert(0, "' . py_home_dir . '")'
-        py import vim_rbql
     else
         call rainbow_csv#find_python_interpreter()
         if s:system_python_interpreter == ""
@@ -1694,10 +1671,8 @@ func! s:converged_select(table_buf_number, rb_script_path, query_buf_nr)
         let [psv_query_status, psv_error_report, psv_warning_report, psv_dst_table_path] = rainbow_csv#parse_report(report_content)
     elseif has("python3")
         exe 'python3 ' . py_call
-    elseif s:has_python_27()
-        exe 'python ' . py_call
     else
-        call s:ShowImportantMessage("Error", ["Python not found, vim must have 'python' or 'python3' feature installed to run in this mode"])
+        call s:ShowImportantMessage("Error", ["Python3 not found, vim must have 'python3' feature installed to run in this mode"])
         return 0
     endif
 
