@@ -118,8 +118,9 @@ function smart_split(src, dlm, policy, preserve_quotes_and_whitespaces) {
 
 
 class MultilineRecordAggregator {
-    constructor(comment_prefix) {
+    constructor(comment_prefix, comment_regex) {
         this.comment_prefix = comment_prefix;
+        this.comment_regex = comment_regex;
         this.reset();
     }
     add_line(line_text) {
@@ -127,6 +128,10 @@ class MultilineRecordAggregator {
             throw new Error('Invalid usage - record aggregator must be reset before adding new lines');
         }
         if (this.comment_prefix && this.rfc_line_buffer.length == 0 && line_text.startsWith(this.comment_prefix)) {
+            this.has_comment_line = true;
+            return false;
+        }
+        if (this.comment_regex && this.rfc_line_buffer.length == 0 && line_text.search(this.comment_regex) != -1) {
             this.has_comment_line = true;
             return false;
         }

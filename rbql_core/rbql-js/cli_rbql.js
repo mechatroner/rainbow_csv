@@ -16,6 +16,7 @@ var interactive_mode = false;
 
 // TODO implement colored output like in Python version
 // TODO implement query history like in Python version. "readline" modules allows to do that, see "completer" parameter.
+// TODO switch to built-in node util parseArgs module (added in 2022)
 
 // FIXME test readline on Win: disable interactive mode?
 
@@ -133,9 +134,9 @@ async function sample_lines(table_path) {
 }
 
 
-async function sample_records(table_path, encoding, delim, policy, comment_prefix, trim_whitespaces) {
+async function sample_records(table_path, encoding, delim, policy, comment_prefix, trim_whitespaces, comment_regex) {
     let table_stream = fs.createReadStream(table_path);
-    let sampling_iterator = new rbql_csv.CSVRecordIterator(table_stream, null, encoding, delim, policy, /*has_header=*/false, comment_prefix, 'input', 'a', trim_whitespaces);
+    let sampling_iterator = new rbql_csv.CSVRecordIterator(table_stream, null, encoding, delim, policy, /*has_header=*/false, comment_prefix, 'input', 'a', trim_whitespaces, comment_regex);
     let sampled_records = await sampling_iterator.get_all_records(10);
     let warnings = sampling_iterator.get_warnings();
     return [sampled_records, warnings];
@@ -183,7 +184,7 @@ async function handle_query_success(warnings, output_path, encoding, delim, poli
             }
         }
         if (interactive_mode) {
-            let [records, _warnings] = await sample_records(output_path, encoding, delim, policy, /*comment_prefix=*/null, /*trim_whitespaces=*/false);
+            let [records, _warnings] = await sample_records(output_path, encoding, delim, policy, /*comment_prefix=*/null, /*trim_whitespaces=*/false, /*comment_regex=*/null);
             console.log('\nOutput table preview:');
             console.log('====================================');
             print_colorized(records, delim, false, false);
@@ -210,6 +211,7 @@ async function run_with_js(args) {
     var csv_encoding = args['encoding'];
     var with_headers = args['with-headers'];
     var comment_prefix = args['comment-prefix'];
+    var comment_regex = args['comment-regex'];
     var trim_whitespaces = args['trim-spaces'];
     var output_delim = get_default(args, 'out-delim', null);
     var output_policy = get_default(args, 'out-policy', null);
@@ -231,7 +233,7 @@ async function run_with_js(args) {
         // * This is CLI so no way we are in the Electron environment which can't use the TextDecoder
         // * Streaming mode works a little faster (since we don't need to do the manual validation)
         // TODO check if the current node installation doesn't have ICU enabled (which is typicaly provided by Node.js by default, see https://nodejs.org/api/intl.html) and report a user-friendly error with an option to use latin-1 encoding or switch the interpreter
-        await rbql_csv.query_csv(query, input_path, delim, policy, output_path, output_delim, output_policy, csv_encoding, warnings, with_headers, comment_prefix, user_init_code, {'trim_whitespaces': trim_whitespaces});
+        await rbql_csv.query_csv(query, input_path, delim, policy, output_path, output_delim, output_policy, csv_encoding, warnings, with_headers, comment_prefix, user_init_code, {'trim_whitespaces': trim_whitespaces, 'comment_regex': comment_regex});
         await handle_query_success(warnings, output_path, csv_encoding, output_delim, output_policy);
         return true;
     } catch (e) {
@@ -251,8 +253,8 @@ function get_default_output_path(input_path, delim) {
 }
 
 
-async function show_preview(input_path, encoding, delim, policy, with_headers, comment_prefix, trim_whitespaces) {
-    let [records, warnings] = await sample_records(input_path, encoding, delim, policy, comment_prefix, trim_whitespaces);
+async function show_preview(input_path, encoding, delim, policy, with_headers, comment_prefix, trim_whitespaces, comment_regex) {
+    let [records, warnings] = await sample_records(input_path, encoding, delim, policy, comment_prefix, trim_whitespaces, comment_regex);
     console.log('Input table preview:');
     console.log('====================================');
     print_colorized(records, delim, true, with_headers);
@@ -281,7 +283,7 @@ async function run_interactive_loop(args) {
         if (!delim)
             throw new GenericError('Unable to autodetect table delimiter. Provide column separator explicitly with "--delim" option');
     }
-    await show_preview(input_path, args['encoding'], delim, policy, args['with-headers'], args['comment-prefix'], args['trim-spaces']);
+    await show_preview(input_path, args['encoding'], delim, policy, args['with-headers'], args['comment-prefix'], args['trim-spaces'], args['comment-regex']);
     args.delim = delim;
     args.policy = policy;
     if (!args.output) {
@@ -367,7 +369,8 @@ function main() {
         '--delim': {'help': 'Delimiter character or multicharacter string, e.g. "," or "###". Can be autodetected in interactive mode', 'metavar': 'DELIM'},
         '--policy': {'help': 'Split policy, see the explanation below. Supported values: "simple", "quoted", "quoted_rfc", "whitespace", "monocolumn". Can be autodetected in interactive mode', 'metavar': 'POLICY'},
         '--with-headers': {'boolean': true, 'help': 'Indicates that input (and join) table has header'},
-        '--comment-prefix': {'help': 'Ignore lines in input and join tables that start with the comment PREFIX, e.g. "#" or ">>"', 'metavar': 'PREFIX'},
+        '--comment-prefix': {'help': 'Ignore lines in input and join tables that start with the comment PREFIX, e.g. "#"', 'metavar': 'PREFIX'},
+        '--comment-regex': {'help': 'Ignore lines in input and join tables that contain the comment REGEX.', 'metavar': 'REGEX'},
         '--encoding': {'default': 'utf-8', 'help': 'Manually set csv encoding', 'metavar': 'ENCODING'},
         '--trim-spaces': {'boolean': true, 'help': 'Trim leading and trailing spaces from fields'},
         '--out-format': {'default': 'input', 'help': 'Output format. Supported values: ' + out_format_names.map(v => `"${v}"`).join(', '), 'metavar': 'FORMAT'},

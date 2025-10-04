@@ -70,7 +70,7 @@ var query_context = null; // Needs to be global for MIN(), MAX(), etc functions.
 
 
 const wrong_aggregation_usage_error = 'Usage of RBQL aggregation functions inside JavaScript expressions is not allowed, see the docs';
-const RBQL_VERSION = '0.27.0';
+const RBQL_VERSION = '0.29.0';
 
 
 function check_if_brackets_match(opening_bracket, closing_bracket) {
@@ -1796,6 +1796,7 @@ class TableWriter extends RBQLOutputWriter {
         super();
         this.table = external_table;
         this.header = null;
+        this.finished = false;
     }
 
     async write(fields) {
@@ -1805,6 +1806,33 @@ class TableWriter extends RBQLOutputWriter {
 
     set_header(header) {
         this.header = header;
+    }
+
+    async finish() {
+        this.finished = true;
+    }
+}
+
+
+class TablePipe {
+    constructor() {
+        this.table = [];
+        this.writer = new TableWriter(this.table);
+        this.iterator = null;
+    }
+
+    get_writer() {
+        return this.writer;
+    }
+
+    get_iterator() {
+        if (!this.writer.finished) {
+            throw new RbqlIOHandlingError("Trying to read from non-thread-safe table pipe while not finishing writing yet");
+        }
+        if (this.iterator === null) {
+            this.iterator = new TableIterator(this.table, this.writer.header);
+        }
+        return this.iterator;
     }
 }
 
@@ -1925,7 +1953,12 @@ async function shallow_parse_input_query(query_text, input_iterator, join_tables
 }
 
 
-async function query(query_text, input_iterator, output_writer, output_warnings, join_tables_registry=null, user_init_code='') {
+function split_query_to_stages(query_text) {
+    return query_text.split(/\|[>]?[ ]*(?=(?:select|update)[ ])/i);
+}
+
+
+async function staged_query(query_text, input_iterator, output_writer, output_warnings, join_tables_registry, user_init_code) {
     query_context = new RBQLContext(query_text, input_iterator, output_writer, user_init_code);
     await shallow_parse_input_query(query_text, input_iterator, join_tables_registry, query_context);
     await compile_and_run(query_context);
@@ -1934,6 +1967,20 @@ async function query(query_text, input_iterator, output_writer, output_warnings,
     if (query_context.join_map_impl)
         output_warnings.push(...query_context.join_map_impl.get_warnings());
     output_warnings.push(...output_writer.get_warnings());
+}
+
+
+async function query(query_text, input_iterator, output_writer, output_warnings, join_tables_registry=null, user_init_code='') {
+    let query_stages = split_query_to_stages(query_text);
+    let previous_pipe = null;
+    for (let i = 0; i < query_stages.length; i++) {
+        let query_stage_text = query_stages[i];
+        let output_pipe = i + 1 < query_stages.length ? new TablePipe() : null;
+        let stage_iterator = previous_pipe === null ? input_iterator : previous_pipe.get_iterator();
+        let stage_writer = output_pipe === null ? output_writer : output_pipe.get_writer();
+        await staged_query(query_stage_text, stage_iterator, stage_writer, output_warnings, join_tables_registry, user_init_code);
+        previous_pipe = output_pipe;
+    }
 }
 
 
