@@ -106,20 +106,30 @@ function split_whitespace_separated_str(src, preserve_whitespaces=false) {
 }
 
 
+function get_polymorphic_split_function(dlm, policy, preserve_quotes_and_whitespaces) {
+    // TODO consider moving this function to rbql_csv.js
+    if (policy === 'simple') {
+        return (src) => [src.split(dlm), false];
+    } else if (policy === 'whitespace') {
+        return (src) => [split_whitespace_separated_str(src, preserve_quotes_and_whitespaces), false];
+    } else if (policy === 'monocolumn') {
+        return (src) => [[src], false];
+    } else if (policy === 'quoted' || policy === 'quoted_rfc') {
+        return (src) => split_quoted_str(src, dlm, preserve_quotes_and_whitespaces);
+    } else {
+        throw new Error(`Unsupported splitting policy: ${policy}`);
+    }
+}
+
 function smart_split(src, dlm, policy, preserve_quotes_and_whitespaces) {
-    if (policy === 'simple')
-        return [src.split(dlm), false];
-    if (policy === 'whitespace')
-        return [split_whitespace_separated_str(src, preserve_quotes_and_whitespaces), false];
-    if (policy === 'monocolumn')
-        return [[src], false];
-    return split_quoted_str(src, dlm, preserve_quotes_and_whitespaces);
+    return get_polymorphic_split_function(dlm, policy, preserve_quotes_and_whitespaces)(src);
 }
 
 
 class MultilineRecordAggregator {
-    constructor(comment_prefix) {
+    constructor(comment_prefix, comment_regex) {
         this.comment_prefix = comment_prefix;
+        this.comment_regex = comment_regex;
         this.reset();
     }
     add_line(line_text) {
@@ -127,6 +137,10 @@ class MultilineRecordAggregator {
             throw new Error('Invalid usage - record aggregator must be reset before adding new lines');
         }
         if (this.comment_prefix && this.rfc_line_buffer.length == 0 && line_text.startsWith(this.comment_prefix)) {
+            this.has_comment_line = true;
+            return false;
+        }
+        if (this.comment_regex && this.rfc_line_buffer.length == 0 && line_text.search(this.comment_regex) != -1) {
             this.has_comment_line = true;
             return false;
         }
@@ -153,12 +167,38 @@ class MultilineRecordAggregator {
 }
 
 
+class RecordQueue {
+    // TODO compare performance with a linked list
+    constructor() {
+        this.push_stack = [];
+        this.pull_stack = [];
+    }
+
+    enqueue(record) {
+        this.push_stack.push(record);
+    }
+
+    dequeue() {
+        if (!this.pull_stack.length) {
+            if (!this.push_stack.length)
+                return null;
+            this.pull_stack = this.push_stack;
+            this.pull_stack.reverse();
+            this.push_stack = [];
+        }
+        return this.pull_stack.pop();
+    }
+}
+
+
 module.exports.split_quoted_str = split_quoted_str;
 module.exports.split_whitespace_separated_str = split_whitespace_separated_str;
 module.exports.smart_split = smart_split;
+module.exports.get_polymorphic_split_function = get_polymorphic_split_function;
 module.exports.quote_field = quote_field;
 module.exports.rfc_quote_field = rfc_quote_field;
 module.exports.unquote_field = unquote_field;
 module.exports.unquote_fields = unquote_fields;
 module.exports.split_lines = split_lines;
 module.exports.MultilineRecordAggregator = MultilineRecordAggregator;
+module.exports.RecordQueue = RecordQueue;

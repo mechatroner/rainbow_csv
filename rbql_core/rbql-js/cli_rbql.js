@@ -5,6 +5,7 @@ const readline = require('readline');
 
 const rbql = require('./rbql.js');
 const rbql_csv = require('./rbql_csv.js');
+const rbql_json = require('./rbql_json.js');
 const csv_utils = require('./csv_utils.js');
 const cli_parser = require('./cli_parser.js');
 
@@ -16,6 +17,7 @@ var interactive_mode = false;
 
 // TODO implement colored output like in Python version
 // TODO implement query history like in Python version. "readline" modules allows to do that, see "completer" parameter.
+// TODO switch to built-in node util parseArgs module (added in 2022)
 
 // FIXME test readline on Win: disable interactive mode?
 
@@ -133,9 +135,9 @@ async function sample_lines(table_path) {
 }
 
 
-async function sample_records(table_path, encoding, delim, policy, comment_prefix, trim_whitespaces) {
+async function sample_records(table_path, encoding, delim, policy, comment_prefix, trim_whitespaces, comment_regex) {
     let table_stream = fs.createReadStream(table_path);
-    let sampling_iterator = new rbql_csv.CSVRecordIterator(table_stream, null, encoding, delim, policy, /*has_header=*/false, comment_prefix, 'input', 'a', trim_whitespaces);
+    let sampling_iterator = new rbql_csv.CSVRecordIterator(table_stream, null, encoding, delim, policy, /*has_header=*/false, comment_prefix, 'input', 'a', trim_whitespaces, comment_regex);
     let sampled_records = await sampling_iterator.get_all_records(10);
     let warnings = sampling_iterator.get_warnings();
     return [sampled_records, warnings];
@@ -183,7 +185,7 @@ async function handle_query_success(warnings, output_path, encoding, delim, poli
             }
         }
         if (interactive_mode) {
-            let [records, _warnings] = await sample_records(output_path, encoding, delim, policy, /*comment_prefix=*/null, /*trim_whitespaces=*/false);
+            let [records, _warnings] = await sample_records(output_path, encoding, delim, policy, /*comment_prefix=*/null, /*trim_whitespaces=*/false, /*comment_regex=*/null);
             console.log('\nOutput table preview:');
             console.log('====================================');
             print_colorized(records, delim, false, false);
@@ -199,7 +201,7 @@ async function handle_query_success(warnings, output_path, encoding, delim, poli
 }
 
 
-async function run_with_js(args) {
+async function run_with_js_csv_mode(args) {
     var delim = normalize_delim(args['delim']);
     var policy = args['policy'] ? args['policy'] : get_default_policy(delim);
     var query = args['query'];
@@ -210,6 +212,7 @@ async function run_with_js(args) {
     var csv_encoding = args['encoding'];
     var with_headers = args['with-headers'];
     var comment_prefix = args['comment-prefix'];
+    var comment_regex = args['comment-regex'];
     var trim_whitespaces = args['trim-spaces'];
     var output_delim = get_default(args, 'out-delim', null);
     var output_policy = get_default(args, 'out-policy', null);
@@ -231,7 +234,7 @@ async function run_with_js(args) {
         // * This is CLI so no way we are in the Electron environment which can't use the TextDecoder
         // * Streaming mode works a little faster (since we don't need to do the manual validation)
         // TODO check if the current node installation doesn't have ICU enabled (which is typicaly provided by Node.js by default, see https://nodejs.org/api/intl.html) and report a user-friendly error with an option to use latin-1 encoding or switch the interpreter
-        await rbql_csv.query_csv(query, input_path, delim, policy, output_path, output_delim, output_policy, csv_encoding, warnings, with_headers, comment_prefix, user_init_code, {'trim_whitespaces': trim_whitespaces});
+        await rbql_csv.query_csv(query, input_path, delim, policy, output_path, output_delim, output_policy, csv_encoding, warnings, with_headers, comment_prefix, user_init_code, {'trim_whitespaces': trim_whitespaces, 'comment_regex': comment_regex});
         await handle_query_success(warnings, output_path, csv_encoding, output_delim, output_policy);
         return true;
     } catch (e) {
@@ -251,8 +254,8 @@ function get_default_output_path(input_path, delim) {
 }
 
 
-async function show_preview(input_path, encoding, delim, policy, with_headers, comment_prefix, trim_whitespaces) {
-    let [records, warnings] = await sample_records(input_path, encoding, delim, policy, comment_prefix, trim_whitespaces);
+async function show_preview(input_path, encoding, delim, policy, with_headers, comment_prefix, trim_whitespaces, comment_regex) {
+    let [records, warnings] = await sample_records(input_path, encoding, delim, policy, comment_prefix, trim_whitespaces, comment_regex);
     console.log('Input table preview:');
     console.log('====================================');
     print_colorized(records, delim, true, with_headers);
@@ -281,7 +284,7 @@ async function run_interactive_loop(args) {
         if (!delim)
             throw new GenericError('Unable to autodetect table delimiter. Provide column separator explicitly with "--delim" option');
     }
-    await show_preview(input_path, args['encoding'], delim, policy, args['with-headers'], args['comment-prefix'], args['trim-spaces']);
+    await show_preview(input_path, args['encoding'], delim, policy, args['with-headers'], args['comment-prefix'], args['trim-spaces'], args['comment-regex']);
     args.delim = delim;
     args.policy = policy;
     if (!args.output) {
@@ -294,7 +297,7 @@ async function run_interactive_loop(args) {
         while (true) {
             let query = await read_user_query(user_input_reader);
             args.query = query;
-            let success = await run_with_js(args);
+            let success = await run_with_js_csv_mode(args);
             if (success)
                 break;
         }
@@ -304,9 +307,13 @@ async function run_interactive_loop(args) {
 }
 
 
-let tool_description = `rbql-js
 
-Run RBQL queries against CSV files and data streams
+let csv_tool_description = `rbql-js
+
+Run RBQL queries against CSV and JSON files and data streams
+
+For JSON run:
+$ rbql-js json --help
 
 rbql-js supports two modes: non-interactive (with "--query" option) and interactive (without "--query" option)
 Interactive mode shows source table preview which makes query editing much easier. Usage example:
@@ -315,7 +322,7 @@ Non-interactive mode supports source tables in stdin. Usage example:
   $ rbql-js --query "select a1, a2 order by a1" --delim , < input.csv
 `;
 
-let epilog = `
+let csv_epilog = `
 Description of the available CSV split policies:
   * "simple" - RBQL uses simple split() function and doesn't perform special handling of double quote characters
   * "quoted" - Separator can be escaped inside double-quoted fields. Double quotes inside double-quoted fields must be doubled
@@ -324,8 +331,15 @@ Description of the available CSV split policies:
   * "monocolumn" - RBQL doesn't perform any split at all, each line is a single-element record, i.e. only "a1" and "NR" are available
 `;
 
+let json_tool_description = `rbql-js json
 
-async function do_main(args) {
+Run RBQL queries against JSON files and data streams
+`;
+
+let json_epilog = '';
+
+
+async function do_csv_main(args) {
 
     if (args['version']) {
         console.log(rbql.version);
@@ -348,7 +362,7 @@ async function do_main(args) {
         if (!args.hasOwnProperty('delim')) {
             throw new GenericError('Separator must be provided with "--delim" option in non-interactive mode');
         }
-        await run_with_js(args);
+        await run_with_js_csv_mode(args);
     } else {
         interactive_mode = true;
         if (error_format == 'json') {
@@ -359,7 +373,57 @@ async function do_main(args) {
 }
 
 
-function main() {
+// FIXME make sure that error handling is OK especially when you query json lines as array object and vice versa.
+async function run_with_js_json_mode(args) {
+    var query = args['query'];
+    if (!query)
+        throw new RbqlParsingError('RBQL query is empty');
+    var input_path = get_default(args, 'input', null);
+    var output_path = get_default(args, 'output', null);
+    let init_source_file = get_default(args, 'init-source-file', null);
+    let pretty_output = args['pretty-output'];
+    let json_lines = args['json-lines'];
+    let json_stream = args['json-stream'];
+    let input_json_lines = false;
+    let output_json_lines = false;
+    let input_json_stream = false;
+    let output_json_stream = false;
+    if (json_lines) {
+        input_json_lines = true;
+        output_json_lines = true;
+    }
+    if (json_stream) {
+        input_json_stream = true;
+        output_json_stream = true;
+    }
+    // TODO consider adding error-mode arg
+    let user_init_code = '';
+    if (init_source_file !== null)
+        user_init_code = rbql_csv.read_user_init_code(init_source_file);
+    let pretty_indent = pretty_output ? 4 : null;
+    try {
+        let warnings = [];
+        await rbql_json.query_json(query, input_path, output_path, warnings, user_init_code, input_json_lines, output_json_lines, pretty_indent, input_json_stream, output_json_stream);
+        if (warnings !== null) {
+            for (let i = 0; i < warnings.length; i++) {
+                show_warning(warnings[i]);
+            }
+        }
+        return true;
+    } catch (e) {
+        if (!interactive_mode)
+            throw e;
+        show_exception(e);
+        return false;
+    }
+}
+
+async function do_json_main(args) {
+    // TODO: implement interactive mode for rbql json.
+    await run_with_js_json_mode(args);
+}
+
+function run_csv_mode() {
     var scheme = {
         '--input': {'help': 'Read csv table from FILE instead of stdin. Required in interactive mode', 'metavar': 'FILE'},
         '--query': {'help': 'Query string in rbql. Run in interactive mode if empty', 'metavar': 'QUERY'},
@@ -367,7 +431,8 @@ function main() {
         '--delim': {'help': 'Delimiter character or multicharacter string, e.g. "," or "###". Can be autodetected in interactive mode', 'metavar': 'DELIM'},
         '--policy': {'help': 'Split policy, see the explanation below. Supported values: "simple", "quoted", "quoted_rfc", "whitespace", "monocolumn". Can be autodetected in interactive mode', 'metavar': 'POLICY'},
         '--with-headers': {'boolean': true, 'help': 'Indicates that input (and join) table has header'},
-        '--comment-prefix': {'help': 'Ignore lines in input and join tables that start with the comment PREFIX, e.g. "#" or ">>"', 'metavar': 'PREFIX'},
+        '--comment-prefix': {'help': 'Ignore lines in input and join tables that start with the comment PREFIX, e.g. "#"', 'metavar': 'PREFIX'},
+        '--comment-regex': {'help': 'Ignore lines in input and join tables that contain the comment REGEX.', 'metavar': 'REGEX'},
         '--encoding': {'default': 'utf-8', 'help': 'Manually set csv encoding', 'metavar': 'ENCODING'},
         '--trim-spaces': {'boolean': true, 'help': 'Trim leading and trailing spaces from fields'},
         '--out-format': {'default': 'input', 'help': 'Output format. Supported values: ' + out_format_names.map(v => `"${v}"`).join(', '), 'metavar': 'FORMAT'},
@@ -377,8 +442,34 @@ function main() {
         '--version': {'boolean': true, 'help': 'Print RBQL version and exit'},
         '--init-source-file': {'help': 'Path to init source file to use instead of ~/.rbql_init_source.js', 'hidden': true}
     };
-    let args = cli_parser.parse_cmd_args(process.argv, scheme, tool_description, epilog);
-    do_main(args).then(() => {}).catch(error_info => { show_exception(error_info); process.exit(1); });
+    let parsed_args = cli_parser.parse_cmd_args(process.argv, scheme, csv_tool_description, csv_epilog);
+    do_csv_main(parsed_args).then(() => {}).catch(error_info => { show_exception(error_info); process.exit(1); });
+}
+
+
+function run_json_mode(args) {
+    var scheme = {
+        '--input': {'help': 'Read csv table from FILE instead of stdin. Required in interactive mode', 'metavar': 'FILE'},
+        '--query': {'help': 'Query string in rbql. Run in interactive mode if empty', 'metavar': 'QUERY'},
+        '--output': {'help': 'Write output table to FILE instead of stdout', 'metavar': 'FILE'},
+        '--json-lines': {'boolean': true, 'help': 'Use json lines format both for input and output'},
+        '--json-stream': {'boolean': true, 'help': 'Use json stream format both for input and output'},
+        '--pretty-output': {'boolean': true, 'help': 'Pretty-print output. Incompatible with json lines output mode'},
+        '--init-source-file': {'help': 'Path to init source file to use instead of ~/.rbql_init_source.js', 'hidden': true}
+    };
+    let parsed_args = cli_parser.parse_cmd_args(args, scheme, json_tool_description, json_epilog);
+    do_json_main(parsed_args).then(() => {}).catch(error_info => { show_exception(error_info); process.exit(1); });
+}
+
+
+function main() {
+    if (process.argv[2] == 'json') {
+        // TODO consider if this is a reliable way to remove the `json` element.
+        let args_without_json = process.argv.slice(0, 2).concat(process.argv.slice(3));
+        run_json_mode(args_without_json);
+        return;
+    }
+    run_csv_mode();
 }
 
 

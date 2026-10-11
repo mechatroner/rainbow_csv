@@ -70,7 +70,7 @@ var query_context = null; // Needs to be global for MIN(), MAX(), etc functions.
 
 
 const wrong_aggregation_usage_error = 'Usage of RBQL aggregation functions inside JavaScript expressions is not allowed, see the docs';
-const RBQL_VERSION = '0.27.0';
+const RBQL_VERSION = '0.30.0';
 
 
 function check_if_brackets_match(opening_bracket, closing_bracket) {
@@ -78,6 +78,8 @@ function check_if_brackets_match(opening_bracket, closing_bracket) {
 }
 
 
+// TODO: consider using acorn as an alternative to Python's ast. Looks like acorn doesn't have any third-party deps.
+// Or just use trailing subscript [<foo>] as the best guess for the output column name. We can always allow explicit override by the user.
 function parse_root_bracket_level_text_spans(select_expression) {
     let text_spans = []; // parts of text separated by commas at the root parenthesis level
     let last_pos = 0;
@@ -122,12 +124,14 @@ function unquote_string(quoted_str) {
 
 function column_info_from_text_span(text_span, string_literals) {
     // This function is a rough equivalent of "column_info_from_node()" function in python version of RBQL
+    // The extraction is best effort, it might be "better" to sometimes incorrectly guess the output column name than assign it as `colN` which is also meaningless.
     text_span = text_span.trim();
     let rbql_star_marker = '__RBQL_INTERNAL_STAR';
     let simple_var_match = /^[_a-zA-Z][_a-zA-Z0-9]*$/.exec(text_span);
-    let attribute_match = /^([ab])\.([_a-zA-Z][_a-zA-Z0-9]*)$/.exec(text_span);
+    // Previously the regex required the first bart to be the column name i.e. [ab] but, this was relaxed to allow parsing things like a.foo.bar which is needed for json.
+    let attribute_match = /^(.*)\.([_a-zA-Z][_a-zA-Z0-9]*)$/.exec(text_span);
     let subscript_int_match = /^([ab])\[([0-9]+)\]$/.exec(text_span);
-    let subscript_str_match = /^([ab])\[___RBQL_STRING_LITERAL([0-9]+)___\]$/.exec(text_span);
+    let subscript_str_match = /^.*\[___RBQL_STRING_LITERAL([0-9]+)___\]$/.exec(text_span);
     let as_alias_match = /^(.*) (as|AS) +([a-zA-Z][a-zA-Z0-9_]*) *$/.exec(text_span);
     if (as_alias_match !== null) {
         return {table_name: null, column_index: null, column_name: null, is_star: false, alias_name: as_alias_match[3]};
@@ -144,10 +148,12 @@ function column_info_from_text_span(text_span, string_literals) {
         // Some examples for this branch: NR, NF
         return {table_name: null, column_index: null, column_name: text_span, is_star: false, alias_name: null};
     } else if (attribute_match !== null) {
-        let table_name = attribute_match[1];
         let column_name = attribute_match[2];
         if (column_name == rbql_star_marker) {
-            return {table_name: table_name, column_index: null, column_name: null, is_star: true, alias_name: null};
+            let table_name = attribute_match[1];
+            if (table_name == 'a' || table_name == 'b') {
+                return {table_name: table_name, column_index: null, column_name: null, is_star: true, alias_name: null};
+            }
         }
         return {table_name: null, column_index: null, column_name: column_name, is_star: false, alias_name: null};
     } else if (subscript_int_match != null) {
@@ -155,8 +161,7 @@ function column_info_from_text_span(text_span, string_literals) {
         let column_index = parseInt(subscript_int_match[2]) - 1;
         return {table_name: table_name, column_index: column_index, column_name: null, is_star: false, alias_name: null};
     } else if (subscript_str_match != null) {
-        let table_name = subscript_str_match[1];
-        let replaced_string_literal_id = subscript_str_match[2];
+        let replaced_string_literal_id = subscript_str_match[1];
         if (replaced_string_literal_id < string_literals.length) {
             let quoted_column_name = string_literals[replaced_string_literal_id];
             let unquoted_column_name = unquote_string(quoted_column_name);
@@ -1115,11 +1120,17 @@ function parse_dictionary_variables(query_text, prefix, column_names, dst_variab
 
     // FIXME to prevent typos in attribute names either use query-based variable parsing which can properly handle back-tick strings or wrap "a" and "b" variables with ES6 Proxies https://stackoverflow.com/a/25658975/2898283
     assert(prefix === 'a' || prefix === 'b');
-    let dict_test_rgx = new RegExp(`(?:^|[^_a-zA-Z0-9])${prefix}\\[`);
+    let dict_test_rgx = new RegExp(`(?:^|[^_a-zA-Z0-9.])${prefix}\\[`);
     if (query_text.search(dict_test_rgx) == -1)
         return;
+    let seen_column_names = new Set();
     for (let i = 0; i < column_names.length; i++) {
         let column_name = column_names[i];
+        if (seen_column_names.has(column_name)) {
+            // TODO instead of skipping duplicates we ned to report a warning at least.
+            continue; // This ensures first seen priority - the same logic as in `parse_attribute_variables`.
+        }
+        seen_column_names.add(column_name);
         if (query_probably_has_dictionary_variable(query_text, column_name)) {
             let escaped_column_name = js_string_escape_column_name(column_name, '"');
             dst_variables_map[`${prefix}["${escaped_column_name}"]`] = {initialize: true, index: i};
@@ -1132,11 +1143,11 @@ function parse_dictionary_variables(query_text, prefix, column_names, dst_variab
 }
 
 
-function parse_attribute_variables(query_text, prefix, column_names, column_names_source, dst_variables_map) {
+function parse_attribute_variables(query_text, prefix, column_names, dst_variables_map) {
     // The purpose of this algorithm is to minimize number of variables in varibale_map to improve performance, ideally it should be only variables from the query
 
     assert(prefix === 'a' || prefix === 'b');
-    let rgx = new RegExp(`(?:^|[^_a-zA-Z0-9])${prefix}\\.([_a-zA-Z][_a-zA-Z0-9]*)`, 'g');
+    let rgx = new RegExp(`(?:^|[^_a-zA-Z0-9.])${prefix}\\.([_a-zA-Z][_a-zA-Z0-9]*)`, 'g');
     let matches = get_all_matches(rgx, query_text);
     let column_names_from_query = matches.map(v => v[1]);
     for (let column_name of column_names_from_query) {
@@ -1144,28 +1155,8 @@ function parse_attribute_variables(query_text, prefix, column_names, column_name
         if (zero_based_idx != -1) {
             dst_variables_map[`${prefix}.${column_name}`] = {initialize: true, index: zero_based_idx};
         } else {
-            throw new RbqlParsingError(`Unable to find column "${column_name}" in ${prefix == 'a' ? 'input' : 'join'} ${column_names_source}`);
+            throw new RbqlParsingError(`Unable to find column "${column_name}" in ${prefix == 'a' ? 'input' : 'join'} header`);
         }
-    }
-}
-
-
-function map_variables_directly(query_text, column_names, dst_variables_map) {
-    for (let i = 0; i < column_names.length; i++) {
-        let column_name = column_names[i];
-        if ( /^[_a-zA-Z][_a-zA-Z0-9]*$/.exec(column_name) === null)
-            throw new RbqlIOHandlingError(`Unable to use column name "${column_name}" as RBQL/JS variable`);
-        if (query_text.indexOf(column_name) != -1)
-            dst_variables_map[column_name] = {initialize: true, index: i};
-    }
-}
-
-
-function ensure_no_ambiguous_variables(query_text, input_column_names, join_column_names) {
-    let join_column_names_set = new Set(join_column_names);
-    for (let column_name of input_column_names) {
-        if (join_column_names_set.has(column_name) && query_text.indexOf(column_name) != -1) // False positive is tolerable here
-            throw new RbqlParsingError(get_ambiguous_error_msg(column_name));
     }
 }
 
@@ -1326,7 +1317,9 @@ function translate_update_expression(update_expression, input_variables_map, str
     let first_assignment = str_strip(update_expression.split('=')[0]);
     let first_assignment_error = `Unable to parse "UPDATE" expression: the expression must start with assignment, but "${first_assignment}" does not look like an assignable field name`;
 
-    let assignment_looking_rgx = /(?:^|,) *(a[.#a-zA-Z0-9\[\]_]*) *=(?=[^=])/g;
+    // The below regex would still fail for query like `UPDATE a1 = foo(123, a2 = 20)` - but it is very uncommon to have a function argument like aN.
+    // Such failure should produce a syntax error during execution instead of producing wrong results.
+    let assignment_looking_rgx = /(?:^|,) *(a[0-9\[.][.#a-zA-Z0-9\[\]_]*) *=(?=[^=])/g;
     let update_expressions = [];
     let pos = 0;
     while (true) {
@@ -1678,9 +1671,6 @@ class RBQLInputIterator {
     stop() {
         throw new Error("Unable to call the interface method");
     }
-    async get_variables_map(query_text) {
-        throw new Error("Unable to call the interface method");
-    }
     async get_record() {
         throw new Error("Unable to call the interface method");
     }
@@ -1730,39 +1720,45 @@ class RBQLTableRegistry {
 }
 
 
+function get_variables_map(query_text, table_variable_prefix, table_header) {
+    // One thing to consider it that this function can be implemented in 2 ways:
+    // 1. Go from query to data - parse query for variable names and then initialize only those variables that are present in the query.
+    // 2. Go from header to query - iterate over column names (and check if they are present in the query for optimization) and initalize the corresponding variables (or just all variables from the header, named and unnamed).
+    // Approach #1 seem to be a more reliable because it gurantees that we just fail if we see a['unknown_column'] in the query instead of producing incorrect results. 
+    // If we go from header to query we just wouldn't initialize variable a['unknown_column'] and it would be None during execution, which can lead to incorrect results instead of an error.
+    let variable_map = new Object();
+    parse_basic_variables(query_text, table_variable_prefix, variable_map);
+    parse_array_variables(query_text, table_variable_prefix, variable_map);
+    if (table_header !== null) {
+        if (table_header.length == 1 && table_header[0] == table_variable_prefix) {
+            // Handle monocolumn (or json which is also monocolumn) case.
+            variable_map[table_variable_prefix] = {initialize: true, index: 0};
+        } else {
+            parse_dictionary_variables(query_text, table_variable_prefix, table_header, variable_map);
+            parse_attribute_variables(query_text, table_variable_prefix, table_header, variable_map);
+        }
+    }
+    return variable_map;
+};
+
+
 class TableIterator extends RBQLInputIterator {
-    constructor(table, column_names=null, normalize_column_names=true, variable_prefix='a') {
+    constructor(table, column_names=null, variable_prefix='a') {
         super();
         this.table = table;
         this.column_names = column_names;
-        this.normalize_column_names = normalize_column_names;
         this.variable_prefix = variable_prefix;
         this.nr = 0;
         this.fields_info = new Map();
         this.stopped = false;
+
+        if (this.table.length && this.column_names !== null && this.column_names.length != this.table[0].length)
+            throw new RbqlIOHandlingError('List of column names and table records have different lengths');
     }
 
 
     stop() {
         this.stopped = true;
-    };
-
-
-    async get_variables_map(query_text) {
-        let variable_map = new Object();
-        parse_basic_variables(query_text, this.variable_prefix, variable_map);
-        parse_array_variables(query_text, this.variable_prefix, variable_map);
-        if (this.column_names !== null) {
-            if (this.table.length && this.column_names.length != this.table[0].length)
-                throw new RbqlIOHandlingError('List of column names and table records have different lengths');
-            if (this.normalize_column_names) {
-                parse_dictionary_variables(query_text, this.variable_prefix, this.column_names, variable_map);
-                parse_attribute_variables(query_text, this.variable_prefix, this.column_names, 'column names list', variable_map);
-            } else {
-                map_variables_directly(query_text, this.column_names, variable_map);
-            }
-        }
-        return variable_map;
     };
 
 
@@ -1796,6 +1792,7 @@ class TableWriter extends RBQLOutputWriter {
         super();
         this.table = external_table;
         this.header = null;
+        this.finished = false;
     }
 
     async write(fields) {
@@ -1806,22 +1803,48 @@ class TableWriter extends RBQLOutputWriter {
     set_header(header) {
         this.header = header;
     }
+
+    async finish() {
+        this.finished = true;
+    }
+}
+
+
+class TablePipe {
+    constructor() {
+        this.table = [];
+        this.writer = new TableWriter(this.table);
+        this.iterator = null;
+    }
+
+    get_writer() {
+        return this.writer;
+    }
+
+    get_iterator() {
+        if (!this.writer.finished) {
+            throw new RbqlIOHandlingError("Trying to read from non-thread-safe table pipe while not finishing writing yet");
+        }
+        if (this.iterator === null) {
+            this.iterator = new TableIterator(this.table, this.writer.header);
+        }
+        return this.iterator;
+    }
 }
 
 
 class SingleTableRegistry extends RBQLTableRegistry {
-    constructor(table, column_names=null, normalize_column_names=true, table_id='b') {
+    constructor(table, column_names=null, table_id='b') {
         super();
         this.table = table;
         this.table_id = table_id;
         this.column_names = column_names;
-        this.normalize_column_names = normalize_column_names;
     }
 
     get_iterator_by_table_id(table_id) {
         if (table_id.toLowerCase() !== this.table_id)
             throw new RbqlIOHandlingError(`Unable to find join table: "${table_id}"`);
-        return new TableIterator(this.table, this.column_names, this.normalize_column_names, 'b');
+        return new TableIterator(this.table, this.column_names, 'b');
     };
 }
 
@@ -1835,7 +1858,8 @@ async function shallow_parse_input_query(query_text, input_iterator, join_tables
     if (rb_actions.hasOwnProperty(WITH)) {
         input_iterator.handle_query_modifier(rb_actions[WITH]);
     }
-    var input_variables_map = await input_iterator.get_variables_map(query_text);
+    let input_header = await input_iterator.get_header();
+    var input_variables_map = get_variables_map(query_text, 'a', input_header);
 
     if (rb_actions.hasOwnProperty(ORDER_BY) && rb_actions.hasOwnProperty(UPDATE))
         throw new RbqlParsingError('"ORDER BY" is not allowed in "UPDATE" queries');
@@ -1848,21 +1872,20 @@ async function shallow_parse_input_query(query_text, input_iterator, join_tables
     }
 
 
-    let input_header = await input_iterator.get_header();
     let join_variables_map = null;
     let join_header = null;
     if (rb_actions.hasOwnProperty(JOIN)) {
-        var [rhs_table_id, variable_pairs] = parse_join_expression(rb_actions[JOIN]['text']);
         if (join_tables_registry === null)
             throw new RbqlParsingError('JOIN operations are not supported by the application');
+        var [rhs_table_id, variable_pairs] = parse_join_expression(rb_actions[JOIN]['text']);
         let join_record_iterator = join_tables_registry.get_iterator_by_table_id(rhs_table_id);
         if (!join_record_iterator)
             throw new RbqlParsingError(`Unable to find join table: "${rhs_table_id}"`);
         if (rb_actions.hasOwnProperty(WITH)) {
             join_record_iterator.handle_query_modifier(rb_actions[WITH]);
         }
-        join_variables_map = await join_record_iterator.get_variables_map(query_text);
         join_header = await join_record_iterator.get_header();
+        join_variables_map = get_variables_map(query_text, 'b', join_header);
         if (input_header === null && join_header !== null) {
             throw new RbqlIOHandlingError('Inconsistent modes: Input table doesn\'t have a header while the Join table has a header');
         }
@@ -1925,7 +1948,12 @@ async function shallow_parse_input_query(query_text, input_iterator, join_tables
 }
 
 
-async function query(query_text, input_iterator, output_writer, output_warnings, join_tables_registry=null, user_init_code='') {
+function split_query_to_stages(query_text) {
+    return query_text.split(/\|[>]?[ ]*(?=(?:select|update)[ ])/i);
+}
+
+
+async function staged_query(query_text, input_iterator, output_writer, output_warnings, join_tables_registry, user_init_code) {
     query_context = new RBQLContext(query_text, input_iterator, output_writer, user_init_code);
     await shallow_parse_input_query(query_text, input_iterator, join_tables_registry, query_context);
     await compile_and_run(query_context);
@@ -1937,12 +1965,24 @@ async function query(query_text, input_iterator, output_writer, output_warnings,
 }
 
 
-async function query_table(query_text, input_table, output_table, output_warnings, join_table=null, input_column_names=null, join_column_names=null, output_column_names=null, normalize_column_names=true, user_init_code='') {
-    if (!normalize_column_names && input_column_names !== null && join_column_names !== null)
-        ensure_no_ambiguous_variables(query_text, input_column_names, join_column_names);
-    let input_iterator = new TableIterator(input_table, input_column_names, normalize_column_names);
+async function query(query_text, input_iterator, output_writer, output_warnings, join_tables_registry=null, user_init_code='') {
+    let query_stages = split_query_to_stages(query_text);
+    let previous_pipe = null;
+    for (let i = 0; i < query_stages.length; i++) {
+        let query_stage_text = query_stages[i];
+        let output_pipe = i + 1 < query_stages.length ? new TablePipe() : null;
+        let stage_iterator = previous_pipe === null ? input_iterator : previous_pipe.get_iterator();
+        let stage_writer = output_pipe === null ? output_writer : output_pipe.get_writer();
+        await staged_query(query_stage_text, stage_iterator, stage_writer, output_warnings, join_tables_registry, user_init_code);
+        previous_pipe = output_pipe;
+    }
+}
+
+
+async function query_table(query_text, input_table, output_table, output_warnings, join_table=null, input_column_names=null, join_column_names=null, output_column_names=null, user_init_code='') {
+    let input_iterator = new TableIterator(input_table, input_column_names);
     let output_writer = new TableWriter(output_table);
-    let join_tables_registry = join_table === null ? null : new SingleTableRegistry(join_table, join_column_names, normalize_column_names);
+    let join_tables_registry = join_table === null ? null : new SingleTableRegistry(join_table, join_column_names);
     await query(query_text, input_iterator, output_writer, output_warnings, join_tables_registry, user_init_code);
     if (output_column_names !== null) {
         assert(output_column_names.length == 0, '`output_column_names` param must be an empty list or null');
@@ -2006,5 +2046,6 @@ exports.replace_star_count = replace_star_count;
 exports.replace_star_vars_for_header_parsing = replace_star_vars_for_header_parsing;
 exports.select_output_header = select_output_header;
 exports.sample_first_two_inconsistent_records = sample_first_two_inconsistent_records;
+exports.get_variables_map = get_variables_map;
 
 }(typeof exports === 'undefined' ? this.rbql = {} : exports));

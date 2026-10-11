@@ -14,9 +14,6 @@ class RbqlIOHandlingError extends Error {}
 class AssertionError extends Error {}
 
 
-// TODO performance improvement: replace smart_split() with polymorphic_split()
-
-
 function assert(condition, message=null) {
     if (!condition) {
         if (!message) {
@@ -128,35 +125,11 @@ function find_table_path(main_table_dir, table_id) {
 }
 
 
-class RecordQueue {
-    // TODO compare performance with a linked list
-    constructor() {
-        this.push_stack = [];
-        this.pull_stack = [];
-    }
-
-    enqueue(record) {
-        this.push_stack.push(record);
-    }
-
-    dequeue() {
-        if (!this.pull_stack.length) {
-            if (!this.push_stack.length)
-                return null;
-            this.pull_stack = this.push_stack;
-            this.pull_stack.reverse();
-            this.push_stack = [];
-        }
-        return this.pull_stack.pop();
-    }
-}
-
-
 class CSVRecordIterator extends rbql.RBQLInputIterator {
     // CSVRecordIterator implements a typical async producer-consumer model with an internal buffer:
     // get_record() - consumer
     // stream.on('data') - producer
-    constructor(stream, csv_path, encoding, delim, policy, has_header=false, comment_prefix=null, table_name='input', variable_prefix='a', trim_whitespaces=false) {
+    constructor(stream, csv_path, encoding, delim, policy, has_header=false, comment_prefix=null, table_name='input', variable_prefix='a', trim_whitespaces=false, comment_regex=null) {
         super();
         this.stream = stream;
         this.csv_path = csv_path;
@@ -173,6 +146,7 @@ class CSVRecordIterator extends rbql.RBQLInputIterator {
         this.table_name = table_name;
         this.variable_prefix = variable_prefix;
         this.comment_prefix = comment_prefix;
+        this.comment_regex = comment_regex;
         this.trim_whitespaces = trim_whitespaces;
 
         this.decoder = null;
@@ -196,10 +170,10 @@ class CSVRecordIterator extends rbql.RBQLInputIterator {
         this.first_defective_line = null;
 
         this.fields_info = new Map();
-        this.NR = 0; // Record number
-        this.NL = 0; // Line number (NL != NR when the CSV file has comments or multiline fields)
+        this.record_number = 0;
+        this.line_number = 0; // Line number != record number when the CSV file has comments or multiline fields.
 
-        this.line_aggregator = new csv_utils.MultilineRecordAggregator(comment_prefix);
+        this.line_aggregator = new csv_utils.MultilineRecordAggregator(comment_prefix, comment_regex);
 
         this.partially_decoded_line = '';
         this.partially_decoded_line_ends_with_cr = false;
@@ -211,9 +185,11 @@ class CSVRecordIterator extends rbql.RBQLInputIterator {
         // Holds last exception if we don't have any reject callbacks from clients yet.
         this.current_exception = null;
 
-        this.produced_records_queue = new RecordQueue();
+        this.produced_records_queue = new csv_utils.RecordQueue();
 
         this.process_line_polymorphic = policy == 'quoted_rfc' ? this.process_partial_rfc_record_line : this.process_record_line_simple;
+
+        this.polymorphic_split = csv_utils.get_polymorphic_split_function(this.delim, this.policy, false);
     }
 
 
@@ -268,19 +244,6 @@ class CSVRecordIterator extends rbql.RBQLInputIterator {
         this.first_record = this.first_record.slice();
     };
 
-
-    async get_variables_map(query_text) {
-        let variable_map = new Object();
-        rbql.parse_basic_variables(query_text, this.variable_prefix, variable_map);
-        rbql.parse_array_variables(query_text, this.variable_prefix, variable_map);
-
-        await this.preread_first_record();
-        if (this.has_header && this.first_record) {
-            rbql.parse_attribute_variables(query_text, this.variable_prefix, this.first_record, 'CSV header line', variable_map);
-            rbql.parse_dictionary_variables(query_text, this.variable_prefix, this.first_record, variable_map);
-        }
-        return variable_map;
-    };
 
     async get_header() {
         await this.preread_first_record();
@@ -344,26 +307,28 @@ class CSVRecordIterator extends rbql.RBQLInputIterator {
     process_record_line_simple(line) {
         if (this.comment_prefix && line.startsWith(this.comment_prefix))
             return; // Just skip the line
+        if (this.comment_regex && line.search(this.comment_regex) != -1)
+            return; // Just skip the line
         this.process_record_line(line);
     }
 
 
     process_record_line(line) {
-        this.NR += 1;
-        var [record, warning] = csv_utils.smart_split(line, this.delim, this.policy, false);
+        this.record_number += 1;
+        var [record, warning] = this.polymorphic_split(line);
         if (this.trim_whitespaces) {
             record = record.map((v) => v.trim());
         }
         if (warning) {
             if (this.first_defective_line === null) {
-                this.first_defective_line = this.NL;
+                this.first_defective_line = this.line_number;
                 if (this.policy == 'quoted_rfc')
-                    this.store_or_propagate_exception(new RbqlIOHandlingError(`Inconsistent double quote escaping in ${this.table_name} table at record ${this.NR}, line ${this.NL}`));
+                    this.store_or_propagate_exception(new RbqlIOHandlingError(`Inconsistent double quote escaping in ${this.table_name} table at record ${this.record_number}, line ${this.line_number}`));
             }
         }
         let num_fields = record.length;
         if (!this.fields_info.has(num_fields))
-            this.fields_info.set(num_fields, this.NR);
+            this.fields_info.set(num_fields, this.record_number);
         this.produced_records_queue.enqueue(record);
         this.try_resolve_next_record();
     };
@@ -381,8 +346,8 @@ class CSVRecordIterator extends rbql.RBQLInputIterator {
 
 
     process_line(line) {
-        this.NL += 1;
-        if (this.NL === 1) {
+        this.line_number += 1;
+        if (this.line_number === 1) {
             var clean_line = remove_utf8_bom(line, this.encoding);
             if (clean_line != line) {
                 line = clean_line;
@@ -520,7 +485,8 @@ class CSVWriter extends rbql.RBQLOutputWriter {
 
         this.null_in_output = false;
         this.delim_in_simple_output = false;
-        this.header_len = null;
+        this.header = null;
+        this.header_written = false;
         this.first_error = null;
 
         if (policy == 'simple') {
@@ -547,8 +513,7 @@ class CSVWriter extends rbql.RBQLOutputWriter {
 
     set_header(header) {
         if (header !== null) {
-            this.header_len = header.length;
-            this.write(header);
+            this.header = header;
         }
     }
 
@@ -596,11 +561,7 @@ class CSVWriter extends rbql.RBQLOutputWriter {
         }
     };
 
-
-    async write(fields) {
-        if (this.header_len !== null && fields.length != this.header_len)
-            throw new RbqlIOHandlingError(`Inconsistent number of columns in output header and the current record: ${this.header_len} != ${fields.length}`);
-        this.normalize_fields(fields);
+    async do_write(fields) {
         this.stream.write(this.polymorphic_join(fields));
         this.stream.write(this.line_separator);
         let writer_error = this.first_error;
@@ -608,15 +569,31 @@ class CSVWriter extends rbql.RBQLOutputWriter {
             if (writer_error !== null) {
                 reject(writer_error);
             } else {
-                resolve(true);
+                resolve();
             }
         });
+    }
+
+
+    async write(fields) {
+        if (this.header !== null && fields.length != this.header.length)
+            throw new RbqlIOHandlingError(`Inconsistent number of columns in output header and the current record: ${this.header.length} != ${fields.length}`);
+        if (this.header !== null && !this.header_written) {
+            await this.do_write(this.header)
+            this.header_written = true;
+        }
+        this.normalize_fields(fields);
+        await this.do_write(fields);
+        // The return value is needed for the stacked writers architecture in rbql.js.
+        // So far the only writer that can return `false` is the TopWriter which uses it as a flag to request stop when the limit is reached.
+        // This csv writer always succeeds (unless there is an exception).
+        return true;
     };
 
 
-    _write_all(table) {
+    async _write_all(table) {
         for (let i = 0; i < table.length; i++) {
-            this.write(table[i]);
+            await this.write(table[i]);
         }
     };
 
@@ -661,32 +638,34 @@ class FileSystemCSVRegistry extends rbql.RBQLTableRegistry {
         this.encoding = encoding;
         this.has_header = has_header;
         this.comment_prefix = comment_prefix;
-        this.stream = null;
-        this.record_iterator = null;
-
         this.options = options;
-        this.bulk_input_path = null;
-        this.table_path = null;
+        this.active_join_files = [];
     }
 
     get_iterator_by_table_id(table_id) {
-        this.table_path = find_table_path(this.input_file_dir, table_id);
-        if (this.table_path === null) {
+        let stream = null;
+        let table_path = find_table_path(this.input_file_dir, table_id);
+        if (table_path === null) {
             throw new RbqlIOHandlingError(`Unable to find join table "${table_id}"`);
         }
+        let bulk_input_path = null;
         if (this.options && this.options['bulk_read']) {
-            this.bulk_input_path = this.table_path;
+            bulk_input_path = table_path;
         } else {
-            this.stream = fs.createReadStream(this.table_path);
+            stream = fs.createReadStream(table_path);
         }
         let trim_whitespaces = this.options && this.options['trim_whitespaces'] ? true : false;
-        this.record_iterator = new CSVRecordIterator(this.stream, this.bulk_input_path, this.encoding, this.delim, this.policy, this.has_header, this.comment_prefix, table_id, 'b', trim_whitespaces);
-        return this.record_iterator;
+        let comment_regex = this.options && this.options.hasOwnProperty('comment_regex') ? this.options['comment_regex'] : null;
+        let record_iterator = new CSVRecordIterator(stream, bulk_input_path, this.encoding, this.delim, this.policy, this.has_header, this.comment_prefix, table_id, 'b', trim_whitespaces, comment_regex);
+        this.active_join_files.push({'table_path': table_path, 'input_stream': stream, 'record_iterator': record_iterator});
+        return record_iterator;
     };
 
     get_warnings(output_warnings) {
-        if (this.record_iterator && this.has_header) {
-            output_warnings.push(`The first record in JOIN file ${path.basename(this.table_path)} was also treated as header (and skipped)`);
+        if (this.has_header) {
+            for (let active_join_file of this.active_join_files) {
+                output_warnings.push(`The first record in JOIN file ${path.basename(active_join_file.table_path)} was also treated as header (and skipped)`);
+            }
         }
     }
 }
@@ -701,6 +680,7 @@ async function query_csv(query_text, input_path, input_delim, input_policy, outp
         input_stream = input_path === null ? process.stdin : fs.createReadStream(input_path);
     }
     let trim_whitespaces = options && options['trim_whitespaces'] ? true : false;
+    let comment_regex = options && options.hasOwnProperty('comment_regex') ? options['comment_regex'] : null;
     let [output_stream, close_output_on_finish] = output_path === null ? [process.stdout, false] : [fs.createWriteStream(output_path), true];
     if (input_delim == '"' && input_policy == 'quoted')
         throw new RbqlIOHandlingError('Double quote delimiter is incompatible with "quoted" policy');
@@ -717,7 +697,7 @@ async function query_csv(query_text, input_path, input_delim, input_policy, outp
     }
     let input_file_dir = input_path ? path.dirname(input_path) : null;
     let join_tables_registry = new FileSystemCSVRegistry(input_file_dir, input_delim, input_policy, csv_encoding, with_headers, comment_prefix, options);
-    let input_iterator = new CSVRecordIterator(input_stream, bulk_input_path, csv_encoding, input_delim, input_policy, with_headers, comment_prefix, 'input', 'a', trim_whitespaces);
+    let input_iterator = new CSVRecordIterator(input_stream, bulk_input_path, csv_encoding, input_delim, input_policy, with_headers, comment_prefix, 'input', 'a', trim_whitespaces, comment_regex);
     let output_writer = new CSVWriter(output_stream, close_output_on_finish, csv_encoding, output_delim, output_policy);
 
     await rbql.query(query_text, input_iterator, output_writer, output_warnings, join_tables_registry, user_init_code);
@@ -732,5 +712,4 @@ module.exports.FileSystemCSVRegistry = FileSystemCSVRegistry;
 module.exports.interpret_named_csv_format = interpret_named_csv_format;
 module.exports.read_user_init_code = read_user_init_code;
 module.exports.query_csv = query_csv;
-module.exports.RecordQueue = RecordQueue;
 module.exports.exception_to_error_info = rbql.exception_to_error_info;

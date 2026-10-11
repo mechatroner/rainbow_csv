@@ -1,9 +1,4 @@
-# -*- coding: utf-8 -*-
-
 # This module allows to query sqlite databases using RBQL
-
-from __future__ import unicode_literals
-from __future__ import print_function
 
 
 # TODO consider to support table names in "FROM" section of the query, making table_name param of SqliteRecordIterator optional
@@ -37,14 +32,6 @@ class SqliteRecordIterator(rbql_engine.RBQLInputIterator):
     def get_header(self):
         column_names = [description[0] for description in self.cursor.description]
         return column_names
-
-    def get_variables_map(self, query_text):
-        variable_map = dict()
-        rbql_engine.parse_basic_variables(query_text, self.variable_prefix, variable_map)
-        rbql_engine.parse_array_variables(query_text, self.variable_prefix, variable_map)
-        rbql_engine.parse_dictionary_variables(query_text, self.variable_prefix, self.get_header(), variable_map)
-        rbql_engine.parse_attribute_variables(query_text, self.variable_prefix, self.get_header(), 'table column names', variable_map)
-        return variable_map
 
     def get_record(self):
         record_tuple = self.cursor.fetchone()

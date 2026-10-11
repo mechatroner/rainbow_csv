@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-from __future__ import unicode_literals
-from __future__ import print_function
 
 import sys
 import os
@@ -9,6 +7,7 @@ import argparse
 from . import csv_utils
 from . import rbql_csv
 from . import rbql_sqlite
+from . import rbql_json
 from . import rbql_engine
 from . import _version
 
@@ -21,12 +20,7 @@ from . import _version
 # TODO add an option to align columns for content preview. This would be especially useful for Windows which doesn't support terminal colors
 
 
-PY3 = sys.version_info[0] == 3
-
-
 history_path = os.path.join(os.path.expanduser("~"), ".rbql_py_query_history")
-
-polymorphic_input = input if PY3 else raw_input
 
 
 def eprint(*args, **kwargs):
@@ -35,9 +29,6 @@ def eprint(*args, **kwargs):
 
 policy_names = ['quoted', 'simple', 'whitespace', 'quoted_rfc', 'monocolumn']
 out_format_names = ['csv', 'tsv', 'input']
-
-
-polymorphic_xrange = range if PY3 else xrange
 
 
 def get_default_policy(delim):
@@ -87,7 +78,7 @@ def run_with_python_csv(args, is_interactive):
     warnings = []
     error_type, error_msg = None, None
     try:
-        rbql_csv.query_csv(query, input_path, delim, policy, output_path, out_delim, out_policy, csv_encoding, warnings, with_headers, args.comment_prefix, user_init_code, args.color, strip_whitespaces=args.strip_spaces)
+        rbql_csv.query_csv(query, input_path, delim, policy, output_path, out_delim, out_policy, csv_encoding, warnings, with_headers, args.comment_prefix, user_init_code, args.color, strip_whitespaces=args.strip_spaces, comment_regex=args.comment_regex)
     except Exception as e:
         if args.debug_mode:
             raise
@@ -149,12 +140,12 @@ def is_delimited_table(sampled_lines, delim, policy):
     return True
 
 
-def sample_lines(src_path, encoding, delim, policy, comment_prefix=None):
+def sample_lines(src_path, encoding, delim, policy, comment_prefix, comment_regex):
     # TODO this should be a dependency-free function, remove sample line functionality from CSVRecordIterator
     result = []
     with open(src_path, 'rb') as source:
-        line_iterator = rbql_csv.CSVRecordIterator(source, encoding, delim=delim, policy=policy, line_mode=True, comment_prefix=comment_prefix)
-        for _i in polymorphic_xrange(10):
+        line_iterator = rbql_csv.CSVRecordIterator(source, encoding, delim=delim, policy=policy, line_mode=True, comment_prefix=comment_prefix, comment_regex=comment_regex)
+        for _i in range(10):
             line = line_iterator.polymorphic_get_row()
             if line is None:
                 break
@@ -162,8 +153,8 @@ def sample_lines(src_path, encoding, delim, policy, comment_prefix=None):
         return result
 
 
-def autodetect_delim_policy(input_path, encoding, comment_prefix=None):
-    sampled_lines = sample_lines(input_path, encoding, None, None, comment_prefix)
+def autodetect_delim_policy(input_path, encoding, comment_prefix, comment_regex):
+    sampled_lines = sample_lines(input_path, encoding, None, None, comment_prefix, comment_regex)
     autodetection_dialects = [('\t', 'simple'), (',', 'quoted'), (';', 'quoted'), ('|', 'simple')]
     for delim, policy in autodetection_dialects:
         if is_delimited_table(sampled_lines, delim, policy):
@@ -175,9 +166,9 @@ def autodetect_delim_policy(input_path, encoding, comment_prefix=None):
     return (None, None)
 
 
-def sample_records(input_path, delim, policy, encoding, comment_prefix, strip_whitespaces):
+def sample_records(input_path, delim, policy, encoding, comment_prefix, strip_whitespaces, comment_regex):
     with open(input_path, 'rb') as source:
-        record_iterator = rbql_csv.CSVRecordIterator(source, encoding, delim=delim, policy=policy, comment_prefix=comment_prefix, strip_whitespaces=strip_whitespaces)
+        record_iterator = rbql_csv.CSVRecordIterator(source, encoding, delim=delim, policy=policy, comment_prefix=comment_prefix, strip_whitespaces=strip_whitespaces, comment_regex=comment_regex)
         sampled_records = record_iterator.get_all_records(num_rows=10);
         warnings = record_iterator.get_warnings()
         return (sampled_records, warnings)
@@ -201,10 +192,7 @@ def print_colorized(records, delim, encoding, show_column_names, with_headers):
                 colored_field = '{}a{}:{}'.format(color_code, i + 1, field)
             out_fields.append(colored_field)
         out_line = delim.join(out_fields) + reset_color_code
-        if PY3:
-            sys.stdout.buffer.write(out_line.encode(encoding))
-        else:
-            sys.stdout.write(out_line.encode(encoding))
+        sys.stdout.buffer.write(out_line.encode(encoding))
         sys.stdout.write('\n')
         sys.stdout.flush()
 
@@ -227,7 +215,7 @@ def run_interactive_loop(mode, args):
         pass
     while True:
         try:
-            query = polymorphic_input('Input SQL-like RBQL query and press Enter:\n> ')
+            query = input('Input SQL-like RBQL query and press Enter:\n> ')
             query = query.strip()
         except EOFError:
             print()
@@ -247,7 +235,7 @@ def run_interactive_loop(mode, args):
             print('\nOutput table preview:')
             print('====================================')
             # Never strip whitespaces in the output preview.
-            records, _warnings = sample_records(args.output, args.output_delim, args.output_policy, args.encoding, comment_prefix=None, strip_whitespaces=False)
+            records, _warnings = sample_records(args.output, args.output_delim, args.output_policy, args.encoding, comment_prefix=None, strip_whitespaces=False, comment_regex=None)
             print_colorized(records, args.output_delim, args.encoding, show_column_names=False, with_headers=False)
             print('====================================')
             print('Success! Result table was saved to: ' + args.output)
@@ -278,10 +266,10 @@ def select_table_name_by_user_choice(db_connection):
     else:
         print('Showing database tables:')
     print(', '.join(table_names[:max_to_show]))
-    table_name = polymorphic_input('No input table was provided as a CLI argument, please type in the table name to use:\n> ')
+    table_name = input('No input table was provided as a CLI argument, please type in the table name to use:\n> ')
     table_name = table_name.strip()
     while table_name not in table_names:
-        table_name = polymorphic_input('"{}" is not a valid table name. Please enter a valid table name:\n> '.format(table_name))
+        table_name = input('"{}" is not a valid table name. Please enter a valid table name:\n> '.format(table_name))
         table_name = table_name.strip()
     return table_name
 
@@ -327,13 +315,13 @@ def start_preview_mode_csv(args):
         delim = rbql_csv.normalize_delim(args.delim)
         policy = args.policy if args.policy is not None else get_default_policy(delim)
     else:
-        delim, policy = autodetect_delim_policy(input_path, args.encoding, args.comment_prefix)
+        delim, policy = autodetect_delim_policy(input_path, args.encoding, args.comment_prefix, args.comment_regex)
         if delim is None:
             show_error('generic', 'Unable to autodetect table delimiter. Provide column separator explicitly with "--delim" option', is_interactive=True)
             return
         args.delim = delim
         args.policy = policy
-    records, warnings = sample_records(input_path, delim, policy, args.encoding, args.comment_prefix, args.strip_spaces)
+    records, warnings = sample_records(input_path, delim, policy, args.encoding, args.comment_prefix, args.strip_spaces, args.comment_regex)
     print('Input table preview:')
     print('====================================')
     print_colorized(records, delim, args.encoding, show_column_names=True, with_headers=args.with_headers)
@@ -350,7 +338,7 @@ def start_preview_mode_csv(args):
 
 
 csv_tool_description = '''
-Run RBQL queries against CSV files, sqlite databases
+Run RBQL queries against CSV files, JSON files and sqlite databases
 
 rbql supports two modes: non-interactive (with "--query" option) and interactive (without "--query" option)
 
@@ -361,8 +349,11 @@ Non-interactive mode supports reading input tables from stdin and writing output
   $ rbql --query "select a1, a2 order by a1" --delim , < input.csv
 
 By default rbql works with CSV input files.
-To learn how to use rbql to query an sqlite database, run this command:
 
+For json mode run this command:
+  $ rbql json --help
+
+For sqlite mode run this command:
   $ rbql sqlite --help
 
 '''
@@ -383,7 +374,8 @@ def csv_main():
     parser.add_argument('--delim', help='delimiter character or multicharacter string, e.g. "," or "###". Can be autodetected in interactive mode')
     parser.add_argument('--policy', help='CSV split policy, see the explanation below. Can be autodetected in interactive mode', choices=policy_names)
     parser.add_argument('--with-headers', action='store_true', help='indicates that input (and join) table has header')
-    parser.add_argument('--comment-prefix', metavar='PREFIX', help='ignore lines in input and join tables that start with the comment PREFIX, e.g. "#" or ">>"')
+    parser.add_argument('--comment-prefix', metavar='PREFIX', help='ignore lines in input and join tables that start with the comment PREFIX, e.g. "#"')
+    parser.add_argument('--comment-regex', metavar='REGEX', help='ignore lines in input and join tables that contain the comment REGEX')
     parser.add_argument('--query', help='query string in rbql. Run in interactive mode if empty')
     parser.add_argument('--out-format', help='output format', default='input', choices=out_format_names)
     parser.add_argument('--encoding', help='manually set csv encoding', default=rbql_csv.default_csv_encoding, choices=['latin-1', 'utf-8'])
@@ -414,12 +406,6 @@ def csv_main():
         show_error('generic', 'Using "--policy" without "--delim" is not allowed', is_interactive=False)
         sys.exit(1)
 
-    if args.encoding != 'latin-1' and not PY3:
-        if args.delim is not None:
-            args.delim = args.delim.decode(args.encoding)
-        if args.query is not None:
-            args.query = args.query.decode(args.encoding)
-
     is_interactive_mode = args.query is None
     if is_interactive_mode:
         if args.color:
@@ -434,6 +420,80 @@ def csv_main():
             sys.exit(1)
 
 
+def run_with_python_json(args):
+    if args.debug_mode:
+        rbql_json.set_debug_mode()    
+    query = args.query
+    input_path = args.input
+    output_path = args.output
+    input_json_lines = args.input_json_lines
+    output_json_lines = args.output_json_lines
+    output_pretty_indent = 4 if args.pretty_output else None
+    if args.json_lines:
+        input_json_lines = True
+        output_json_lines = True
+
+    input_json_stream = args.input_json_stream
+    output_json_stream = args.output_json_stream
+    if args.json_stream:
+        input_json_stream = True
+        output_json_stream = True
+
+    if input_json_lines and input_json_stream:
+        show_error('generic', 'json lines and json stream input formats are mutually exclusive', is_interactive=False)
+        return False
+
+    if output_json_lines and output_json_stream:
+        show_error('generic', 'json lines and json stream output formats are mutually exclusive', is_interactive=False)
+        return False
+
+    user_init_code = rbql_csv.read_user_init_code(args.init_source_file) if args.init_source_file is not None else ''
+    warnings = []
+    error_type, error_msg = None, None
+    if query is None:
+        show_error('generic', 'Interactive mode is not supported for JSON input', is_interactive=False)
+        return False
+    try:
+        rbql_json.query_json(query, input_path, output_path, warnings, user_init_code, input_json_lines=input_json_lines, output_json_lines=output_json_lines, pretty_indent=output_pretty_indent, input_json_stream=input_json_stream, output_json_stream=output_json_stream)
+    except Exception as e:
+        if args.debug_mode:
+            raise
+        error_type, error_msg = rbql_engine.exception_to_error_info(e)
+    if error_type is None:
+        success = True
+        for warning in warnings:
+            show_warning(warning, is_interactive=False)
+    else:
+        success = False
+        show_error(error_type, error_msg, is_interactive=False)
+    return success
+
+
+json_tool_description = '''
+Run RBQL queries against JSON files
+Currently only JSON Lines format is supported (https://jsonlines.org/)
+'''
+
+def json_main():
+    parser = argparse.ArgumentParser(prog='rbql json', formatter_class=argparse.RawDescriptionHelpFormatter, description=json_tool_description)
+    parser.add_argument('--input', metavar='FILE', help='read csv table from FILE instead of stdin. Required in interactive mode')
+    parser.add_argument('--query', help='query string in rbql. Run in interactive mode if empty')
+    parser.add_argument('--output', metavar='FILE', help='write output table to FILE instead of stdout')
+    parser.add_argument('--json-lines', action='store_true', help='Use json lines format both for input and output')
+    parser.add_argument('--input-json-lines', action='store_true', help='Use json lines format for input')
+    parser.add_argument('--output-json-lines', action='store_true', help='Use json lines format for output')
+    parser.add_argument('--json-stream', action='store_true', help='Use json stream format both for input and output')
+    parser.add_argument('--input-json-stream', action='store_true', help='Use json stream format for input')
+    parser.add_argument('--output-json-stream', action='store_true', help='Use json stream format for output')
+    parser.add_argument('--pretty-output', action='store_true', help='Pretty-print output. Incompatible with json lines output mode')
+    parser.add_argument('--init-source-file', metavar='FILE', help=argparse.SUPPRESS) # Path to init source file to use instead of ~/.rbql_init_source.py
+    parser.add_argument('--debug-mode', action='store_true', help=argparse.SUPPRESS) # Run in debug mode
+    args = parser.parse_args()
+
+    if not run_with_python_json(args):
+        sys.exit(1)
+
+    
 sqlite_tool_description = '''
 Run RBQL queries against sqlite databases
 Although sqlite database can serve as an input data source, the query engine which will be used is RBQL (not sqlite).
@@ -507,11 +567,14 @@ def main():
         if sys.argv[1] == 'sqlite':
             del sys.argv[1]
             sqlite_main()
+        elif sys.argv[1] == 'json':
+            del sys.argv[1]
+            json_main()
         elif sys.argv[1] == 'csv':
             del sys.argv[1]
             csv_main()
         else:
-            # TODO Consider showing "uknown mode" error if the first argument doesn't start with '--'
+            # TODO Consider showing "unknown mode" error if the first argument doesn't start with '--'
             csv_main()
     else:
         csv_main()

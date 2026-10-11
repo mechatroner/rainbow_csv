@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-from __future__ import print_function
 import re
 
 
@@ -63,14 +61,23 @@ def split_whitespace_separated_str(src, preserve_whitespaces=False):
     return result
 
 
-def smart_split(src, dlm, policy, preserve_quotes_and_whitespaces):
+
+def get_polymorphic_split_function(dlm, policy, preserve_quotes_and_whitespaces):
+    # TODO consider moving this function to rbql_csv.js
     if policy == 'simple':
-        return (src.split(dlm), False)
-    if policy == 'whitespace':
-        return (split_whitespace_separated_str(src, preserve_quotes_and_whitespaces), False)
-    if policy == 'monocolumn':
-        return ([src], False)
-    return split_quoted_str(src, dlm, preserve_quotes_and_whitespaces)
+        return lambda src: (src.split(dlm), False)
+    elif policy == 'whitespace':
+        return lambda src: (split_whitespace_separated_str(src, preserve_quotes_and_whitespaces), False)
+    elif policy == 'monocolumn':
+        return lambda src: ([src], False)
+    elif policy == 'quoted' or policy == 'quoted_rfc':
+        return lambda src: split_quoted_str(src, dlm, preserve_quotes_and_whitespaces)
+    else:
+        raise ValueError('Unsupported splitting policy: {}'.format(policy))
+
+def smart_split(src, dlm, policy, preserve_quotes_and_whitespaces):
+    # Prefer to use get_polymorphic_split_function function for better performance if you need to split many strings with the same policy.
+    return get_polymorphic_split_function(dlm, policy, preserve_quotes_and_whitespaces)(src)
 
 
 def extract_line_from_data(data):

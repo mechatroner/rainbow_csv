@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-from __future__ import print_function
-
 from . import rbql_engine
 from . import rbql_pandas
 
@@ -23,7 +19,7 @@ class IPythonDataframeRegistry(rbql_engine.RBQLTableRegistry):
         # https://github.com/google/picatrix/blob/a2f39766ad4b007b125dc8f84916e18fb3dc5478/picatrix/lib/utils.py
         for ns in self.all_ns_refs:
             if table_id in ns and isinstance(ns[table_id], pandas.DataFrame):
-                return rbql_pandas.DataframeIterator(ns[table_id], normalize_column_names=True, variable_prefix=single_char_alias)
+                return rbql_pandas.DataframeIterator(ns[table_id], variable_prefix=single_char_alias)
         return None
 
 
